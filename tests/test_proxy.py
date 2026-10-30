@@ -55,6 +55,22 @@ class ProxyTests(unittest.TestCase):
             client.sendall(payload)
             self.assertEqual(client.recv(len(payload)), payload)
 
+    def test_multiple_profiles_run_independently(self):
+        probe = socket.socket()
+        probe.bind(("127.0.0.1", 0))
+        second_port = probe.getsockname()[1]
+        probe.close()
+        second = ProxyProfile(
+            id=str(uuid.uuid4()), name="second", upstream_host="127.0.0.1",
+            upstream_port=self.echo.server_address[1], bind_host="127.0.0.1", listen_port=second_port,
+        )
+        self.manager.start(second)
+        for port, payload in ((self.listen_port, b"profile-one"), (second_port, b"profile-two")):
+            with socket.create_connection(("127.0.0.1", port), timeout=2) as client:
+                client.sendall(payload)
+                self.assertEqual(client.recv(128), payload)
+        self.assertEqual(len(self.manager.status()), 2)
+
     def test_multiple_clients(self):
         messages = [f"client-{i}".encode() for i in range(8)]
         results = []
