@@ -182,6 +182,14 @@ def create_app(config_path: str | Path = CONFIG_PATH, manager: ProxyManager | No
     def health():
         return jsonify(status="ok", management="localhost-only")
 
+    @app.errorhandler(ValueError)
+    def invalid_request(exc):
+        return jsonify(error=str(exc)), 400
+
+    @app.errorhandler(LookupError)
+    def missing_resource(exc):
+        return jsonify(error=str(exc)), 404
+
     app.extensions["profile_store"] = store
     app.extensions["proxy_manager"] = proxy_manager
     return app
