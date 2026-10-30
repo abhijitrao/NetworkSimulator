@@ -1,0 +1,2 @@
+# M1 core proxy uses only the Python standard library.
+# Flask and dashboard dependencies will be added in M3.
