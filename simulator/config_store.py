@@ -42,17 +42,26 @@ class ProfileStore:
                     os.unlink(temp_name)
 
     @staticmethod
+    def _listeners_conflict(left: ProxyProfile, right: ProxyProfile) -> bool:
+        if left.listen_port != right.listen_port:
+            return False
+        wildcards = {"0.0.0.0", "::", ""}
+        return left.bind_host == right.bind_host or left.bind_host in wildcards or right.bind_host in wildcards
+
+    @staticmethod
     def _validate_unique(profiles: list[ProxyProfile]) -> None:
         ids = [p.id for p in profiles]
         if len(ids) != len(set(ids)):
             raise ValueError("Duplicate profile IDs are not allowed")
-        ports: dict[tuple[str, int], str] = {}
         for profile in profiles:
             profile.validate()
-            key = (profile.bind_host, profile.listen_port)
-            if key in ports:
-                raise ValueError(f"Listener port collision: {profile.listen_port} used by {ports[key]} and {profile.name}")
-            ports[key] = profile.name
+        for index, profile in enumerate(profiles):
+            for other in profiles[index + 1:]:
+                if ProfileStore._listeners_conflict(profile, other):
+                    raise ValueError(
+                        f"Listener port collision: {profile.name} and {other.name} "
+                        f"both conflict on port {profile.listen_port}"
+                    )
 
     @staticmethod
     def import_profiles(current: list[ProxyProfile], imported: list[ProxyProfile], replace: bool = False) -> list[ProxyProfile]:
