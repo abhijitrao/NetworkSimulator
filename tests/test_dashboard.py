@@ -23,6 +23,11 @@ class DashboardTests(unittest.TestCase):
         self.app.extensions["proxy_manager"].stop_all()
         self.temp.cleanup()
 
+    def test_dashboard_page_renders(self):
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"POS Network Simulator", response.data)
+
     def test_state_returns_profiles(self):
         response = self.client.get("/api/state")
         self.assertEqual(response.status_code, 200)
