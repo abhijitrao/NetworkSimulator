@@ -44,8 +44,8 @@ function profileCard(p) {
   html += faultCheck('Pause POS → Server', 'pause_client_to_upstream', fault.pause_client_to_upstream);
   html += faultCheck('Pause Server → POS', 'pause_upstream_to_client', fault.pause_upstream_to_client);
   html += '</div><div class="apply-row"><button class="small-btn" data-action="normal" data-id="' + esc(p.id) + '">Normal</button>';
-  html += '<button class="small-btn" data-action="preset" data-preset="slow" data-id="' + esc(p.id) + '"' + (running ? '' : ' disabled') + '>Slow 500ms</button>';
-  html += '<button class="small-btn" data-action="preset" data-preset="very-slow" data-id="' + esc(p.id) + '"' + (running ? '' : ' disabled') + '>Very slow 2s</button>';
+  html += '<button class="small-btn" data-action="preset" data-preset="slow" data-id="' + esc(p.id) + '"' + (running ? '' : ' disabled') + '>Slow 30s</button>';
+  html += '<button class="small-btn" data-action="preset" data-preset="very-slow" data-id="' + esc(p.id) + '"' + (running ? '' : ' disabled') + '>Very slow 55s</button>';
   html += '<button class="small-btn" data-action="preset" data-preset="unstable" data-id="' + esc(p.id) + '"' + (running ? '' : ' disabled') + '>Unstable</button>';
   html += '<button class="small-btn" data-action="preset" data-preset="no-response" data-id="' + esc(p.id) + '"' + (running ? '' : ' disabled') + '>No response</button>';
   html += '<button class="small-btn go" data-action="apply-fault" data-id="' + esc(p.id) + '"' + (running ? '' : ' disabled title="Start proxy first"') + '>Apply custom</button></div></div>';
@@ -173,8 +173,8 @@ $('profileList').addEventListener('click', async (event) => {
     if (action === 'edit') openDialog(profile);
     else if (action === 'preset') {
       const presets = {
-        slow: {latency_ms:500,jitter_ms:0,bandwidth_bytes_per_second:0,pause_client_to_upstream:false,pause_upstream_to_client:false},
-        'very-slow': {latency_ms:2000,jitter_ms:0,bandwidth_bytes_per_second:0,pause_client_to_upstream:false,pause_upstream_to_client:false},
+        slow: {latency_ms:30000,jitter_ms:0,bandwidth_bytes_per_second:0,pause_client_to_upstream:false,pause_upstream_to_client:false},
+        'very-slow': {latency_ms:55000,jitter_ms:0,bandwidth_bytes_per_second:0,pause_client_to_upstream:false,pause_upstream_to_client:false},
         unstable: {latency_ms:300,jitter_ms:250,bandwidth_bytes_per_second:0,pause_client_to_upstream:false,pause_upstream_to_client:false},
         'no-response': {latency_ms:0,jitter_ms:0,bandwidth_bytes_per_second:0,pause_client_to_upstream:false,pause_upstream_to_client:true}
       };
