@@ -8,6 +8,7 @@ import uuid
 
 @dataclass
 class FaultSettings:
+    apply_to: str = "request"
     latency_ms: int = 0
     jitter_ms: int = 0
     bandwidth_bytes_per_second: int = 0
@@ -18,6 +19,7 @@ class FaultSettings:
     def from_dict(cls, value: dict[str, Any] | None) -> "FaultSettings":
         value = value or {}
         return cls(
+            apply_to=str(value.get("apply_to", "request")),
             latency_ms=int(value.get("latency_ms", 0)),
             jitter_ms=int(value.get("jitter_ms", 0)),
             bandwidth_bytes_per_second=int(value.get("bandwidth_bytes_per_second", 0)),
@@ -26,6 +28,8 @@ class FaultSettings:
         )
 
     def validate(self) -> None:
+        if self.apply_to not in {"request", "response", "both"}:
+            raise ValueError("apply_to must be request, response or both")
         if self.latency_ms < 0 or self.jitter_ms < 0 or self.bandwidth_bytes_per_second < 0:
             raise ValueError("Fault values cannot be negative")
 
