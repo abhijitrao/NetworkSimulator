@@ -12,19 +12,35 @@ A portable-first Windows tool for testing plain TCP and TLS passthrough connecti
 - JSON profile import/export with merge or replace mode.
 - Local-only management API; no payment/application payload logging.
 
-## Quick start (Windows)
+## Quick start (portable Windows EXE)
+
+1. Download the latest `NetworkSimulator-Windows-x64` artifact from the repository's **Actions → Build portable Windows EXE** workflow.
+2. Extract the downloaded artifact ZIP to a normal user-writable folder, for example `D:\\Tools\\NetworkSimulator`.
+3. Double-click `NetworkSimulator.exe`. No separate Python or Flask installation is needed.
+4. The dashboard opens at `http://127.0.0.1:5050`. If it does not, open that address manually.
+5. Add an endpoint profile and start it. Use a unique listener port for every profile.
+
+The EXE stores profiles in a `data` folder beside the EXE. Keep the EXE in a folder where your Windows user can create and modify files. This is a portable, unsigned build; Windows SmartScreen or company endpoint policy may still show a warning or block execution. Do not bypass company security controls—ask IT to approve the executable if needed.
+
+## Development run (Python)
 
 1. Use an IT-approved Python 3.10+ runtime available to your Windows user.
 2. Install the dashboard dependency in your permitted user environment: `python -m pip install --user -r requirements.txt`.
 3. Run `start.bat`.
-4. Open `http://127.0.0.1:5050` if the browser does not open automatically.
-5. Add an endpoint profile and start it. Use a unique listener port for every profile.
 
-For local laptop-only testing, bind a proxy profile to `127.0.0.1`. To accept a physical POS device, select the laptop's reachable LAN IPv4 address or `0.0.0.0` on a trusted network. Office VLAN routing, Wi-Fi client isolation, Windows Firewall and endpoint security may require IT approval. Do not bypass corporate controls.
+To build locally on Windows, install the packages in `requirements-build.txt` and run the PyInstaller command from `.github/workflows/build-windows-exe.yml`.
+
+## Physical POS connectivity and mobile hotspot
+
+For laptop-only testing, bind a proxy profile to `127.0.0.1`. To accept a physical POS device, connect the laptop and POS to the same mobile hotspot, then set the profile bind address to the laptop's hotspot-assigned IPv4 address or `0.0.0.0` and use the configured listener port on the POS.
+
+Check Windows Firewall if the POS cannot connect. A hotspot may allow local client-to-client traffic, but some phones or carrier/device settings isolate clients. If the UAT endpoint is reachable only through an office VPN, verify that the VPN can connect over the mobile hotspot; disconnecting office LAN may remove the route to UAT. Internet is not required for laptop-to-POS local traffic, but is required for an internet-hosted UAT server.
+
+Office VLAN routing, Wi-Fi client isolation, Windows Firewall and endpoint security may require IT approval. Do not bypass corporate controls.
 
 ## Multiple configurations
 
-Profiles are stored locally at `data/profiles.json` and are not committed by default. Example profiles are in `config/profiles.example.json`. Each profile owns an upstream host/port, bind address/listen port, TCP/TLS label and independent fault settings. Import can merge with existing profiles or explicitly replace them.
+Profiles are stored locally in `data/profiles.json` beside the EXE (or in the project folder during Python development) and are not committed by default. Example profiles are in `config/profiles.example.json`. Each profile owns an upstream host/port, bind address/listen port, TCP/TLS label and independent fault settings. Import can merge with existing profiles or explicitly replace them.
 
 ## TLS and certificate validation
 
