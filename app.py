@@ -11,6 +11,8 @@ import webbrowser
 
 from flask import Flask, jsonify, render_template, request
 
+from simulator.network_interfaces import get_network_interfaces
+
 from simulator.config_store import ProfileStore
 from simulator.models import FaultSettings, ProxyProfile
 from simulator.proxy.manager import ProxyManager
@@ -64,6 +66,10 @@ def create_app(config_path: str | Path = CONFIG_PATH, manager: ProxyManager | No
     @app.get("/")
     def index():
         return render_template("index.html")
+
+    @app.get("/api/network/interfaces")
+    def api_network_interfaces():
+        return jsonify(interfaces=get_network_interfaces())
 
     @app.get("/api/state")
     def api_state():
