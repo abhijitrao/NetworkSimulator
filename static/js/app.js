@@ -41,8 +41,8 @@ function profileCard(p) {
   html += faultInput('Jitter (ms)', 'jitter_ms', fault.jitter_ms || 0);
   html += faultInput('Bandwidth (B/s)', 'bandwidth_bytes_per_second', fault.bandwidth_bytes_per_second || 0);
   html += '</div><div class="fault-checks">';
-  html += faultCheck('Pause POS → Server', 'pause_client_to_upstream', fault.pause_client_to_upstream);
-  html += faultCheck('Pause Server → POS', 'pause_upstream_to_client', fault.pause_upstream_to_client);
+  const pauseEnabled = fault.apply_to === 'response' ? fault.pause_upstream_to_client : fault.apply_to === 'both' ? (fault.pause_client_to_upstream || fault.pause_upstream_to_client) : fault.pause_client_to_upstream;
+  html += faultCheck('Pause traffic', 'pause_enabled', pauseEnabled);
   html += '</div><div class="apply-row"><button class="small-btn" data-action="normal" data-id="' + esc(p.id) + '">Normal</button>';
   html += '<button class="small-btn" data-action="preset" data-preset="slow" data-id="' + esc(p.id) + '"' + (running ? '' : ' disabled') + '>Slow 30s</button>';
   html += '<button class="small-btn" data-action="preset" data-preset="very-slow" data-id="' + esc(p.id) + '"' + (running ? '' : ' disabled') + '>Very slow 55s</button>';
@@ -56,6 +56,7 @@ function profileCard(p) {
   }
   return html + '</article>';
 }
+function selectedDirection(card) { return card.querySelector('[data-direction]:checked')?.dataset.direction || 'request'; }
 function faultInput(label, key, value) {
   return '<label>' + label + '<input type="number" min="0" max="100000000" data-fault="' + key + '" value="' + value + '"></label>';
 }
@@ -152,7 +153,7 @@ function formPayload(id) {
     upstream_host:$('upstreamHost').value.trim(), upstream_port:Number($('upstreamPort').value),
     listen_port:Number($('listenPort').value), bind_host:$('bindHost').value,
     connect_timeout_ms:Number($('connectTimeout').value), notes:$('notes').value.trim(), enabled:$('enabled').checked,
-    fault_profile:{latency_ms:0,jitter_ms:0,bandwidth_bytes_per_second:0,pause_client_to_upstream:false,pause_upstream_to_client:false}};
+    fault_profile:{apply_to:'request',latency_ms:0,jitter_ms:0,bandwidth_bytes_per_second:0,pause_client_to_upstream:false,pause_upstream_to_client:false}};
 }
 
 $('profileForm').addEventListener('submit', async (event) => {
@@ -178,7 +179,11 @@ $('profileList').addEventListener('click', async (event) => {
         unstable: {latency_ms:300,jitter_ms:250,bandwidth_bytes_per_second:0,pause_client_to_upstream:false,pause_upstream_to_client:false},
         'no-response': {latency_ms:0,jitter_ms:0,bandwidth_bytes_per_second:0,pause_client_to_upstream:false,pause_upstream_to_client:true}
       };
-      await api('/api/profiles/' + encodeURIComponent(id) + '/fault',{method:'POST',body:JSON.stringify(presets[button.dataset.preset])});
+      const preset = presets[button.dataset.preset];
+      preset.apply_to = selectedDirection(button.closest('.profile-card'));
+      preset.pause_client_to_upstream = button.dataset.preset === 'no-response' && (preset.apply_to === 'request' || preset.apply_to === 'both');
+      preset.pause_upstream_to_client = button.dataset.preset === 'no-response' && (preset.apply_to === 'response' || preset.apply_to === 'both');
+      await api('/api/profiles/' + encodeURIComponent(id) + '/fault',{method:'POST',body:JSON.stringify(preset)});
       await refresh(); toast('Scenario applied: ' + button.textContent);
     }
     else if (action === 'duplicate') {
@@ -204,9 +209,14 @@ $('profileList').addEventListener('click', async (event) => {
       await refresh(); toast('Normal forwarding restored');
     } else if (action === 'apply-fault') {
       const card = button.closest('.profile-card'), payload = {};
+      payload.apply_to = selectedDirection(card);
       card.querySelectorAll('[data-fault]').forEach(input => {
+        if (input.dataset.fault === 'pause_enabled') return;
         payload[input.dataset.fault] = input.type === 'checkbox' ? input.checked : Number(input.value);
       });
+      const pause = card.querySelector('[data-fault="pause_enabled"]').checked;
+      payload.pause_client_to_upstream = pause && (payload.apply_to === 'request' || payload.apply_to === 'both');
+      payload.pause_upstream_to_client = pause && (payload.apply_to === 'response' || payload.apply_to === 'both');
       await api('/api/profiles/' + encodeURIComponent(id) + '/fault',{method:'POST',body:JSON.stringify(payload)});
       await refresh(); toast('Fault settings applied live');
     }
