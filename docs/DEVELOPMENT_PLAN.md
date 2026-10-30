@@ -46,19 +46,21 @@ Do not implement "packet loss" by dropping bytes from a TCP stream: that corrupt
 - Graceful shutdown and connection lifecycle handling.
 - Unit tests with local echo/upstream test servers.
 
-### M2 — Fault injection
+### M2 — Fault injection (implemented; validate in field)
 - Per-direction latency/jitter.
 - Pause/resume forwarding.
 - Bandwidth throttling.
-- Connection close/abort controls.
-- Deterministic tests using injected random source/clock where practical.
+- Best-effort active connection abort.
+- Integration tests for live response pause/resume and latency.
 
-### M3 — Dashboard and profile management
-- Profile list and editor.
+### M3 — Dashboard and profile management (implemented; validate in field)
+- Profile list and editor, duplicate/delete.
 - Start/stop per profile and all profiles.
-- Scenario controls, status, active connection counts.
-- Safe JSON import/export and persistent local configuration.
+- Live fault controls and quick scenario presets.
+- Runtime status, active connection counts and byte counters.
+- JSON import/export with merge or replace.
 - Management API restricted to localhost.
+- Responsive dashboard with no external font/CDN dependency.
 
 ### M4 — TLS passthrough validation
 - Local TLS test server and test certificate fixtures.
