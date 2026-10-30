@@ -5,6 +5,8 @@ import logging
 import socket
 import socketserver
 import threading
+import time
+import uuid
 from dataclasses import dataclass
 from typing import Callable
 
@@ -28,6 +30,7 @@ class ProxyRuntime:
         self.on_connection_change = on_connection_change
         self._lock = threading.RLock()
         self._connections: dict[str, ConnectionInfo] = {}
+        self._sockets: dict[str, set[socket.socket]] = {}
         self._server: socketserver.ThreadingTCPServer | None = None
         self._thread: threading.Thread | None = None
         self._stopping = threading.Event()
@@ -56,7 +59,6 @@ class ProxyRuntime:
             block_on_close = False
 
         server = Server((self.profile.bind_host, self.profile.listen_port), Handler)
-        server.runtime = self  # type: ignore[attr-defined]
         self._server = server
         self._stopping.clear()
         self._thread = threading.Thread(target=server.serve_forever, name=f"proxy-{self.profile.id}", daemon=True)
@@ -70,13 +72,26 @@ class ProxyRuntime:
         if server:
             server.shutdown()
             server.server_close()
+        # Closing accepted sockets unblocks recv/send and lets handler threads finish.
         with self._lock:
-            active = list(self._connections.values())
-        # Active sockets are closed by their handler threads when their peer closes.
+            active_sockets = [sock for sockets in self._sockets.values() for sock in sockets]
+        for sock in active_sockets:
+            self._close_socket(sock)
         if self._thread and self._thread is not threading.current_thread():
             self._thread.join(timeout=2)
         self._thread = None
         LOG.info("Proxy '%s' stopped", self.profile.name)
+
+    @staticmethod
+    def _close_socket(sock: socket.socket) -> None:
+        try:
+            sock.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
+        try:
+            sock.close()
+        except OSError:
+            pass
 
     def _notify(self) -> None:
         if self.on_connection_change:
@@ -86,12 +101,16 @@ class ProxyRuntime:
                 LOG.exception("Connection-change callback failed")
 
     def _handle_client(self, client: socket.socket, address: tuple) -> None:
-        import time
-        import uuid
         connection_id = uuid.uuid4().hex[:12]
         info = ConnectionInfo(connection_id, f"{address[0]}:{address[1]}", time.time())
         upstream: socket.socket | None = None
+        with self._lock:
+            self._connections[connection_id] = info
+            self._sockets[connection_id] = {client}
+        self._notify()
         try:
+            if self._stopping.is_set():
+                return
             client.settimeout(None)
             upstream = socket.create_connection(
                 (self.profile.upstream_host, self.profile.upstream_port),
@@ -99,8 +118,9 @@ class ProxyRuntime:
             )
             upstream.settimeout(None)
             with self._lock:
-                self._connections[connection_id] = info
-            self._notify()
+                self._sockets[connection_id].add(upstream)
+            if self._stopping.is_set():
+                return
             LOG.info("[%s] Connected client %s", connection_id, info.client_address)
             workers = [
                 threading.Thread(target=self._pump, args=(client, upstream, info, "client"), daemon=True),
@@ -117,16 +137,10 @@ class ProxyRuntime:
         finally:
             for sock in (client, upstream):
                 if sock:
-                    try:
-                        sock.shutdown(socket.SHUT_RDWR)
-                    except OSError:
-                        pass
-                    try:
-                        sock.close()
-                    except OSError:
-                        pass
+                    self._close_socket(sock)
             with self._lock:
                 self._connections.pop(connection_id, None)
+                self._sockets.pop(connection_id, None)
             self._notify()
 
     @staticmethod
