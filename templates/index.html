@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>POS Network Simulator</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><div class="brand-mark">NS</div><div><strong>POS Network Simulator</strong><small>TCP relay · TLS passthrough · Fault injection</small></div></div>
+    <div class="top-actions"><span class="local-pill"><i></i> Local dashboard</span><button class="btn ghost" id="refreshBtn">Refresh</button></div>
+  </header>
+  <main class="page">
+    <section class="hero"><div><p class="eyebrow">NETWORK QA TOOLKIT</p><h1>Control your POS network journeys.</h1><p class="sub">Route physical POS traffic through your laptop and reproduce difficult network conditions without changing the upstream service.</p></div><div class="hero-actions"><button class="btn secondary" id="stopAllBtn">Stop all</button><button class="btn primary" id="startAllBtn">Start enabled profiles</button></div></section>
+    <section class="stats"><article class="stat"><span>Profiles</span><strong id="profileCount">0</strong></article><article class="stat"><span>Running proxies</span><strong id="runningCount">0</strong></article><article class="stat"><span>Active connections</span><strong id="connectionCount">0</strong></article><article class="stat"><span>Transport</span><strong>TCP / TLS</strong></article></section>
+    <section class="network-panel" aria-labelledby="networkTitle">
+      <div class="network-heading"><div><p class="eyebrow">POS DEVICE SETUP</p><h2 id="networkTitle">POS Connection Details</h2><p class="muted">Select the network your POS can reach. Enter the displayed IP address and profile port in the POS application's Server Configuration.</p></div><button class="btn secondary" id="refreshNetworkBtn" type="button">↻ Refresh IP addresses</button></div>
+      <div class="network-select-row"><label for="networkInterface">Laptop network interface</label><select id="networkInterface"><option value="">Detecting network interfaces…</option></select><span id="networkScanStatus" class="network-scan-status">Scanning…</span></div>
+      <div id="posConnectionList" class="pos-connection-grid"><div class="empty">Detecting laptop IPv4 addresses…</div></div>
+      <p class="network-footnote">Use the IPv4 address reachable from the POS device. Both devices need network connectivity, and Windows Firewall must allow the listener port.</p>
+    </section>
+    <section class="section-head"><div><p class="eyebrow">ENDPOINTS</p><h2>Configuration profiles</h2><p class="muted">Each profile has its own upstream endpoint, listener port and fault settings.</p></div><div class="section-actions"><button class="btn ghost" id="exportBtn">Export JSON</button><label class="btn ghost file-btn">Import JSON<input type="file" id="importFile" accept="application/json"></label><button class="btn primary" id="addProfileBtn">＋ Add profile</button></div></section>
+    <section id="profileList" class="profile-grid"><div class="empty">Loading profiles…</div></section>
+    <section class="notice"><strong>Security & TLS note</strong><p>The proxy forwards encrypted TLS bytes without decrypting them. Keep certificate-chain validation, hostname verification, SNI and certificate pinning enabled in the POS app. The dashboard binds to localhost; POS listener ports may require Windows Firewall or IT approval.</p></section>
+  </main>
+  <dialog id="profileDialog"><form id="profileForm"><div class="dialog-head"><div><p class="eyebrow">ENDPOINT CONFIGURATION</p><h2 id="dialogTitle">Add profile</h2></div><button type="button" class="icon-btn" id="closeDialog">×</button></div><input type="hidden" id="profileId">
+    <div class="form-grid"><label>Profile name<input id="profileName" required placeholder="HDFC UAT"></label><label>Transport label<select id="transport"><option value="tcp">Plain TCP</option><option value="tls_passthrough">TLS passthrough</option></select></label><label class="wide">Upstream hostname / IP<input id="upstreamHost" required placeholder="uat.example.com"></label><label>Upstream port<input id="upstreamPort" type="number" min="1" max="65535" value="9000" required></label><label>Local listen port<input id="listenPort" type="number" min="1" max="65535" value="8666" required></label><label>Bind address<input id="bindHost" value="127.0.0.1" placeholder="127.0.0.1 or laptop LAN IP" required></label><label>Connect timeout (ms)<input id="connectTimeout" type="number" min="100" max="300000" value="10000"></label><label class="wide">Notes<input id="notes" placeholder="Optional test endpoint notes"></label><label class="check wide"><input id="enabled" type="checkbox" checked> Enable this profile for Start enabled profiles</label></div>
+    <div class="dialog-actions"><button type="button" class="btn ghost" id="cancelDialog">Cancel</button><button type="submit" class="btn primary">Save profile</button></div></form></dialog>
+  <div id="toast" class="toast" role="status"></div>
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body></html>
