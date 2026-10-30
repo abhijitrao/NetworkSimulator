@@ -5,7 +5,9 @@ import json
 import logging
 import os
 from pathlib import Path
+import sys
 import threading
+import webbrowser
 
 from flask import Flask, jsonify, render_template, request
 
@@ -13,15 +15,23 @@ from simulator.config_store import ProfileStore
 from simulator.models import FaultSettings, ProxyProfile
 from simulator.proxy.manager import ProxyManager
 
-ROOT = Path(__file__).resolve().parent
-DATA_DIR = ROOT / "data"
+# PyInstaller extracts bundled read-only resources to _MEIPASS. Keep user data
+# beside the executable so profiles survive restarts and one-file temp cleanup.
+FROZEN = bool(getattr(sys, "frozen", False))
+RESOURCE_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+APP_DIR = Path(sys.executable).resolve().parent if FROZEN else Path(__file__).resolve().parent
+DATA_DIR = APP_DIR / "data"
 CONFIG_PATH = DATA_DIR / "profiles.json"
-EXAMPLE_PATH = ROOT / "config" / "profiles.example.json"
+EXAMPLE_PATH = RESOURCE_DIR / "config" / "profiles.example.json"
 LOG = logging.getLogger("posnet.dashboard")
 
 
 def create_app(config_path: str | Path = CONFIG_PATH, manager: ProxyManager | None = None) -> Flask:
-    app = Flask(__name__)
+    app = Flask(
+        __name__,
+        template_folder=str(RESOURCE_DIR / "templates"),
+        static_folder=str(RESOURCE_DIR / "static"),
+    )
     store = ProfileStore(config_path)
     proxy_manager = manager or ProxyManager()
     state_lock = threading.RLock()
@@ -198,6 +208,9 @@ def create_app(config_path: str | Path = CONFIG_PATH, manager: ProxyManager | No
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     port = int(os.environ.get("POS_SIMULATOR_PORT", "5050"))
+    dashboard_url = f"http://127.0.0.1:{port}"
     app = create_app()
-    LOG.info("Dashboard available at http://127.0.0.1:%s", port)
+    LOG.info("Dashboard available at %s", dashboard_url)
+    if not os.environ.get("POS_SIMULATOR_NO_BROWSER"):
+        threading.Timer(1.0, lambda: webbrowser.open(dashboard_url)).start()
     app.run(host="127.0.0.1", port=port, threaded=True, debug=False, use_reloader=False)
