@@ -190,6 +190,9 @@ class ProxyRuntime:
                     except OSError:
                         pass
                     return
+                # Re-check after recv: a live pause may have been enabled while recv was blocked.
+                if not self._wait_for_forwarding(direction):
+                    return
 
                 settings = self._fault_snapshot()
                 delay_ms = settings.latency_ms
