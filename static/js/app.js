@@ -181,4 +181,7 @@ $('importFile').addEventListener('change', async (event) => {
   finally { event.target.value = ''; }
 });
 refresh().catch(e => toast(e.message));
-setInterval(() => refresh().catch(() => {}), 4000);
+setInterval(() => {
+  const list = $('profileList');
+  if (!list.contains(document.activeElement) && !$('profileDialog').open) refresh().catch(() => {});
+}, 4000);
