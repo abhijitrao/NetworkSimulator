@@ -1,6 +1,8 @@
 const $ = (id) => document.getElementById(id);
 let state = [];
 let toastTimer;
+let networkInterfaces = [];
+let selectedNetworkIp = '';
 
 function toast(message) {
   const el = $('toast');
@@ -61,6 +63,64 @@ function faultCheck(label, key, checked) {
   return '<label><input type="checkbox" data-fault="' + key + '"' + (checked ? ' checked' : '') + '> ' + label + '</label>';
 }
 
+
+async function refreshNetworkInterfaces() {
+  const button = $('refreshNetworkBtn');
+  if (button) { button.disabled = true; button.textContent = 'Scanning…'; }
+  try {
+    const data = await api('/api/network/interfaces');
+    networkInterfaces = data.interfaces || [];
+    const select = $('networkInterface');
+    const previous = select.value || selectedNetworkIp;
+    select.innerHTML = '';
+    if (!networkInterfaces.length) {
+      select.innerHTML = '<option value="">No usable IPv4 address found</option>';
+      selectedNetworkIp = '';
+    } else {
+      networkInterfaces.forEach(item => {
+        const option = document.createElement('option');
+        option.value = item.ipv4;
+        option.textContent = item.name + ' · ' + item.ipv4 + (item.recommended ? ' (Recommended)' : '');
+        select.appendChild(option);
+      });
+      const chosen = networkInterfaces.find(item => item.ipv4 === previous) ||
+        networkInterfaces.find(item => item.recommended) || networkInterfaces[0];
+      select.value = chosen.ipv4;
+      selectedNetworkIp = chosen.ipv4;
+    }
+    $('networkScanStatus').textContent = 'Updated ' + new Date().toLocaleTimeString();
+    renderPosConnections();
+  } catch (e) {
+    $('networkScanStatus').textContent = 'IP detection failed';
+    toast('Could not detect network interfaces: ' + e.message);
+  } finally {
+    if (button) { button.disabled = false; button.textContent = '↻ Refresh IP addresses'; }
+  }
+}
+
+function renderPosConnections() {
+  const host = selectedNetworkIp;
+  const target = $('posConnectionList');
+  if (!host) {
+    target.innerHTML = '<div class="empty">No usable IPv4 address found. Connect Wi-Fi or Ethernet, then refresh.</div>';
+    return;
+  }
+  const enabledProfiles = state.filter(p => p.enabled);
+  if (!enabledProfiles.length) {
+    target.innerHTML = '<div class="empty">Enable a profile to display its POS connection details.</div>';
+    return;
+  }
+  target.innerHTML = enabledProfiles.map(p => {
+    const endpoint = host + ':' + p.listen_port;
+    const running = !!runtimeOf(p).running;
+    return '<article class="pos-connection-card"><div class="pos-connection-top"><strong>' + esc(p.name) + '</strong><span class="status ' + (running ? 'running' : '') + '">' + (running ? '● Running' : '○ Stopped') + '</span></div>' +
+      '<p class="pos-instruction">Enter these details in POS Device → Server Configuration</p>' +
+      '<div class="pos-endpoint">' + esc(endpoint) + '</div>' +
+      '<div class="pos-fields"><span>POS Server IP <b>' + esc(host) + '</b></span><span>POS Server Port <b>' + p.listen_port + '</b></span></div>' +
+      '<button class="small-btn copy-endpoint" type="button" data-copy="' + esc(endpoint) + '">Copy IP:Port</button></article>';
+  }).join('');
+}
+
 async function refresh() {
   const data = await api('/api/state');
   state = data.profiles || [];
@@ -68,6 +128,7 @@ async function refresh() {
   $('profileCount').textContent = state.length;
   $('runningCount').textContent = state.filter(p => runtimeOf(p).running).length;
   $('connectionCount').textContent = state.reduce((n,p) => n + (runtimeOf(p).active_connections || 0), 0);
+  renderPosConnections();
 }
 
 function openDialog(profile = null) {
@@ -156,6 +217,24 @@ $('addProfileBtn').addEventListener('click', () => openDialog());
 $('closeDialog').addEventListener('click', () => $('profileDialog').close());
 $('cancelDialog').addEventListener('click', () => $('profileDialog').close());
 $('refreshBtn').addEventListener('click', () => refresh().catch(e => toast(e.message)));
+$('refreshNetworkBtn').addEventListener('click', refreshNetworkInterfaces);
+$('networkInterface').addEventListener('change', event => {
+  selectedNetworkIp = event.target.value;
+  renderPosConnections();
+});
+$('posConnectionList').addEventListener('click', event => {
+  const button = event.target.closest('[data-copy]');
+  if (!button) return;
+  const value = button.dataset.copy;
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(value).then(() => toast('Copied ' + value)).catch(() => toast('Could not copy IP:Port'));
+  } else {
+    const field = document.createElement('textarea');
+    field.value = value; document.body.appendChild(field); field.select();
+    try { document.execCommand('copy'); toast('Copied ' + value); } catch (_) { toast('Could not copy IP:Port'); }
+    field.remove();
+  }
+});
 $('startAllBtn').addEventListener('click', async () => {
   try {
     const result = await api('/api/profiles/start-all',{method:'POST',body:'{}'});
@@ -181,6 +260,7 @@ $('importFile').addEventListener('change', async (event) => {
   finally { event.target.value = ''; }
 });
 refresh().catch(e => toast(e.message));
+refreshNetworkInterfaces();
 setInterval(() => {
   const list = $('profileList');
   if (!list.contains(document.activeElement) && !$('profileDialog').open) refresh().catch(() => {});
