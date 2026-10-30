@@ -1,0 +1,62 @@
+name: Build portable Windows EXE
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [develop]
+    paths:
+      - "app.py"
+      - "simulator/**"
+      - "templates/**"
+      - "static/**"
+      - "config/**"
+      - "requirements*.txt"
+      - ".github/workflows/build-windows-exe.yml"
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install build dependencies
+        run: python -m pip install -r requirements-build.txt
+
+      - name: Run test suite
+        run: python -m unittest discover -s tests -v
+
+      - name: Build standalone executable
+        shell: cmd
+        run: >-
+          python -m PyInstaller
+          --noconfirm
+          --clean
+          --onefile
+          --console
+          --name NetworkSimulator
+          --add-data "templates;templates"
+          --add-data "static;static"
+          --add-data "config;config"
+          app.py
+
+      - name: Verify executable exists
+        shell: pwsh
+        run: |
+          if (!(Test-Path "dist/NetworkSimulator.exe")) {
+            throw "NetworkSimulator.exe was not created"
+          }
+          Get-Item "dist/NetworkSimulator.exe" | Format-List Name,Length,FullName
+
+      - name: Upload portable EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: NetworkSimulator-Windows-x64
+          path: dist/NetworkSimulator.exe
+          if-no-files-found: error
+          retention-days: 30
