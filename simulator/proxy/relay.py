@@ -1,7 +1,11 @@
-"""Concurrent, byte-preserving TCP relay. TLS is forwarded as opaque bytes."""
+"""Concurrent byte-preserving TCP relay with live directional fault injection.
+
+TLS is forwarded as opaque bytes. The proxy never terminates TLS or sees plaintext.
+"""
 from __future__ import annotations
 
 import logging
+import random
 import socket
 import socketserver
 import threading
@@ -10,7 +14,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Callable
 
-from ..models import ProxyProfile
+from ..models import FaultSettings, ProxyProfile
 
 LOG = logging.getLogger("posnet.proxy")
 
@@ -29,6 +33,8 @@ class ProxyRuntime:
         self.profile = profile
         self.on_connection_change = on_connection_change
         self._lock = threading.RLock()
+        self._fault_condition = threading.Condition(self._lock)
+        self._fault = profile.fault_profile
         self._connections: dict[str, ConnectionInfo] = {}
         self._sockets: dict[str, set[socket.socket]] = {}
         self._server: socketserver.ThreadingTCPServer | None = None
@@ -43,6 +49,25 @@ class ProxyRuntime:
     def active_connections(self) -> list[ConnectionInfo]:
         with self._lock:
             return list(self._connections.values())
+
+    def set_fault_settings(self, settings: FaultSettings) -> None:
+        settings.validate()
+        with self._fault_condition:
+            self._fault = settings
+            self._fault_condition.notify_all()
+        LOG.info("Fault settings updated for profile '%s'", self.profile.name)
+
+    def get_fault_settings(self) -> FaultSettings:
+        with self._lock:
+            return FaultSettings.from_dict(vars(self._fault))
+
+    def abort_connections(self) -> int:
+        """Close all current client/upstream sockets (best-effort connection abort)."""
+        with self._lock:
+            sockets = [sock for group in self._sockets.values() for sock in group]
+        for sock in sockets:
+            self._close_socket(sock)
+        return len(sockets)
 
     def start(self) -> None:
         if self.running:
@@ -68,15 +93,13 @@ class ProxyRuntime:
 
     def stop(self) -> None:
         self._stopping.set()
+        with self._fault_condition:
+            self._fault_condition.notify_all()
         server, self._server = self._server, None
         if server:
             server.shutdown()
             server.server_close()
-        # Closing accepted sockets unblocks recv/send and lets handler threads finish.
-        with self._lock:
-            active_sockets = [sock for sockets in self._sockets.values() for sock in sockets]
-        for sock in active_sockets:
-            self._close_socket(sock)
+        self.abort_connections()
         if self._thread and self._thread is not threading.current_thread():
             self._thread.join(timeout=2)
         self._thread = None
@@ -143,11 +166,23 @@ class ProxyRuntime:
                 self._sockets.pop(connection_id, None)
             self._notify()
 
-    @staticmethod
-    def _pump(source: socket.socket, destination: socket.socket, info: ConnectionInfo, direction: str) -> None:
+    def _fault_snapshot(self) -> FaultSettings:
+        with self._lock:
+            return FaultSettings.from_dict(vars(self._fault))
+
+    def _wait_for_forwarding(self, direction: str) -> bool:
+        pause_key = "pause_client_to_upstream" if direction == "client" else "pause_upstream_to_client"
+        with self._fault_condition:
+            while getattr(self._fault, pause_key) and not self._stopping.is_set():
+                self._fault_condition.wait(timeout=0.2)
+            return not self._stopping.is_set()
+
+    def _pump(self, source: socket.socket, destination: socket.socket, info: ConnectionInfo, direction: str) -> None:
         counter = "bytes_from_client" if direction == "client" else "bytes_from_upstream"
         try:
-            while True:
+            while not self._stopping.is_set():
+                if not self._wait_for_forwarding(direction):
+                    return
                 chunk = source.recv(65536)
                 if not chunk:
                     try:
@@ -155,6 +190,18 @@ class ProxyRuntime:
                     except OSError:
                         pass
                     return
+
+                settings = self._fault_snapshot()
+                delay_ms = settings.latency_ms
+                if settings.jitter_ms:
+                    delay_ms += random.uniform(-settings.jitter_ms, settings.jitter_ms)
+                if delay_ms > 0 and self._stopping.wait(delay_ms / 1000.0):
+                    return
+
+                rate = settings.bandwidth_bytes_per_second
+                if rate > 0 and self._stopping.wait(len(chunk) / rate):
+                    return
+
                 destination.sendall(chunk)
                 setattr(info, counter, getattr(info, counter) + len(chunk))
         except (ConnectionResetError, BrokenPipeError, OSError) as exc:
