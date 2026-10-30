@@ -195,13 +195,14 @@ class ProxyRuntime:
                     return
 
                 settings = self._fault_snapshot()
-                delay_ms = settings.latency_ms
-                if settings.jitter_ms:
+                applies = settings.apply_to == "both" or (settings.apply_to == "request" and direction == "client") or (settings.apply_to == "response" and direction == "upstream")
+                delay_ms = settings.latency_ms if applies else 0
+                if applies and settings.jitter_ms:
                     delay_ms += random.uniform(-settings.jitter_ms, settings.jitter_ms)
                 if delay_ms > 0 and self._stopping.wait(delay_ms / 1000.0):
                     return
 
-                rate = settings.bandwidth_bytes_per_second
+                rate = settings.bandwidth_bytes_per_second if applies else 0
                 if rate > 0 and self._stopping.wait(len(chunk) / rate):
                     return
 
