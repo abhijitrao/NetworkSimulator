@@ -36,7 +36,7 @@ function profileCard(p) {
   html += '<button class="small-btn" data-action="duplicate" data-id="' + esc(p.id) + '">Duplicate</button>';
   html += '<button class="small-btn danger" data-action="delete" data-id="' + esc(p.id) + '"' + (running ? ' disabled' : '') + '>Delete</button>';
   if (running) html += '<button class="small-btn danger" data-action="abort" data-id="' + esc(p.id) + '">Abort connections</button>';
-  html += '</div><div class="fault-panel"><div class="fault-title">LIVE FAULT INJECTION</div><div class="fault-grid">';
+  html += '</div><div class="fault-panel"><div class="fault-title">LIVE FAULT INJECTION</div><div class="fault-direction"><span>Apply faults to</span><label><input type="radio" name="direction-' + esc(p.id) + '" data-direction="request"' + ((fault.apply_to || 'request') === 'request' ? ' checked' : '') + '> Request (POS → Server)</label><label><input type="radio" name="direction-' + esc(p.id) + '" data-direction="response"' + (fault.apply_to === 'response' ? ' checked' : '') + '> Response (Server → POS)</label><label><input type="radio" name="direction-' + esc(p.id) + '" data-direction="both"' + (fault.apply_to === 'both' ? ' checked' : '') + '> Both</label></div><div class="fault-grid">';
   html += faultInput('Latency (ms)', 'latency_ms', fault.latency_ms || 0);
   html += faultInput('Jitter (ms)', 'jitter_ms', fault.jitter_ms || 0);
   html += faultInput('Bandwidth (B/s)', 'bandwidth_bytes_per_second', fault.bandwidth_bytes_per_second || 0);
