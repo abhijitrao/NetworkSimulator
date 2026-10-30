@@ -52,6 +52,12 @@ class FaultInjectionTests(unittest.TestCase):
     def test_pause_response_and_resume_without_reconnect(self):
         with socket.create_connection(("127.0.0.1", self.port), timeout=2) as client:
             client.settimeout(0.25)
+            deadline = time.monotonic() + 2
+            while time.monotonic() < deadline:
+                rows = self.manager.status()
+                if rows and rows[0]["active_connections"] == 1:
+                    break
+                time.sleep(0.01)
             self.manager.set_fault(self.profile.id, FaultSettings(pause_upstream_to_client=True))
             client.sendall(b"held-response")
             with self.assertRaises(socket.timeout):
