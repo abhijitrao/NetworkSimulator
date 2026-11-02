@@ -133,7 +133,7 @@ function renderPosConnections() {
 async function refreshEvents() {
   const filter = $('eventFilter').value;
   const data = await api('/api/events');
-  const events = (data.events || []).filter(item => filter === 'all' || item.type === filter);
+  const events = (data.events || []).filter(item => filter === 'all' || (filter === 'REQUEST' ? ['REQUEST_RECEIVED', 'REQUEST'].includes(item.type) : item.type === filter));
   const target = $('eventLog');
   target.innerHTML = events.length ? events.slice(-200).reverse().map(item =>
     '<div class="event-row"><time>' + esc(new Date(item.timestamp * 1000).toLocaleTimeString()) + '</time><b class="event-type ' + esc(item.type.toLowerCase()) + '">' + esc(item.type) + '</b><span>' + esc(item.profile) + '</span><code>' + esc(item.processing_code || '-') + '</code><span>' + esc(item.detail) + '</span></div>'
