@@ -39,8 +39,8 @@ def extract_mti(frame: bytes) -> str:
 
 
 def extract_processing_code(frame: bytes) -> str | None:
-    """Return DE 3 as six ASCII decimal digits, or None when absent."""
-    if len(frame) < 23:
+    """Return DE 3 as six digits, supporting ASCII and packed-BCD wire formats."""
+    if len(frame) < 20:
         raise Iso8583FrameError("ISO8583 frame is too short for DE 3")
     declared = decode_bcd_length(frame[:2])
     if declared != len(frame) - 2:
@@ -50,14 +50,21 @@ def extract_processing_code(frame: bytes) -> str | None:
         raise Iso8583FrameError("Secondary bitmap is not supported by this request format")
     if not (bitmap[0] & 0x20):
         return None
-    raw = frame[17:23]
-    try:
-        processing_code = raw.decode("ascii")
-    except UnicodeDecodeError as exc:
-        raise Iso8583FrameError("DE 3 is not ASCII") from exc
-    if len(processing_code) != 6 or not processing_code.isdigit():
-        raise Iso8583FrameError("DE 3 must contain six ASCII digits")
-    return processing_code
+
+    # Prefer the six-byte ASCII representation when present.
+    ascii_raw = frame[17:23]
+    if len(ascii_raw) == 6 and all(0x30 <= value <= 0x39 for value in ascii_raw):
+        return ascii_raw.decode("ascii")
+
+    # POS terminals may encode DE 3 as three packed-BCD bytes (e.g. 98 20 03).
+    bcd_raw = frame[17:20]
+    digits = []
+    for value in bcd_raw:
+        high, low = value >> 4, value & 0x0F
+        if high > 9 or low > 9:
+            raise Iso8583FrameError("DE 3 is neither six ASCII digits nor packed BCD")
+        digits.extend((str(high), str(low)))
+    return "".join(digits)
 
 class Iso8583StreamFramer:
     """Collect arbitrary TCP chunks and emit complete length-prefixed frames."""
