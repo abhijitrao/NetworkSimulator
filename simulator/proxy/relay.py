@@ -195,7 +195,7 @@ class ProxyRuntime:
 
     def _pump(self, source: socket.socket, destination: socket.socket, info: ConnectionInfo, direction: str, suppress_responses: threading.Event, suppressed_code: dict) -> None:
         counter = "bytes_from_client" if direction == "client" else "bytes_from_upstream"
-        framer = Iso8583StreamFramer() if direction == 'client' and self.profile.transport_label == 'tcp' else None
+        framer = Iso8583StreamFramer() if direction == 'client' and self.profile.transport_label == 'tcp' and self.profile.processing_codes else None
         request_started = False
         try:
             while not self._stopping.is_set():
@@ -230,7 +230,13 @@ class ProxyRuntime:
                 if direction == 'client' and not request_started:
                     # Log the POS-side request as soon as bytes arrive, even if the
                     # configured ISO8583 framing cannot decode this stream.
-                    self._emit_event('REQUEST_RECEIVED', info, detail='POS request data received')
+                    detected_mti = ''
+                    if direction == 'client' and self.profile.transport_label == 'tcp' and framer is None:
+                        try:
+                            detected_mti = extract_mti(chunk)
+                        except Iso8583FrameError:
+                            pass
+                    self._emit_event('REQUEST_RECEIVED', info, detail='POS request data received', mti=detected_mti)
                     request_started = True
 
                 outgoing_chunks = [chunk]
