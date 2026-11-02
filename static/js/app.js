@@ -140,7 +140,7 @@ function formatEventTimestamp(timestamp) {
 async function refreshEvents() {
   const filter = $('eventFilter').value;
   const data = await api('/api/events');
-  const events = (data.events || []).filter(item => filter === 'all' || (filter === 'REQUEST' ? ['REQUEST_RECEIVED', 'REQUEST'].includes(item.type) : item.type === filter));
+  const events = (data.events || []).filter(item => filter === 'all' || (filter === 'REQUEST' ? item.type === 'REQUEST' : item.type === filter));
   const target = $('eventLog');
   target.innerHTML = events.length ? events.slice(-200).reverse().map(item =>
     '<div class="event-row"><time>' + esc(formatEventTimestamp(item.timestamp)) + '</time><b class="event-type ' + esc(item.type.toLowerCase()) + '">' + esc(item.type) + '</b><span>' + esc(item.profile) + '</span><code>' + esc(item.mti || '-') + '</code><code>' + esc(item.processing_code || '-') + '</code><span>' + esc(item.detail) + '</span></div>'
