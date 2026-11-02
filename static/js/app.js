@@ -130,13 +130,20 @@ function renderPosConnections() {
   }).join('');
 }
 
+function formatEventTimestamp(timestamp) {
+  const date = new Date(timestamp * 1000);
+  const pad = (value, size = 2) => String(value).padStart(size, '0');
+  return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate()) +
+    ' ' + pad(date.getHours()) + ':' + pad(date.getMinutes()) + ':' + pad(date.getSeconds()) +
+    '.' + pad(date.getMilliseconds(), 3);
+}
 async function refreshEvents() {
   const filter = $('eventFilter').value;
   const data = await api('/api/events');
   const events = (data.events || []).filter(item => filter === 'all' || (filter === 'REQUEST' ? ['REQUEST_RECEIVED', 'REQUEST'].includes(item.type) : item.type === filter));
   const target = $('eventLog');
   target.innerHTML = events.length ? events.slice(-200).reverse().map(item =>
-    '<div class="event-row"><time>' + esc(new Date(item.timestamp * 1000).toLocaleTimeString()) + '</time><b class="event-type ' + esc(item.type.toLowerCase()) + '">' + esc(item.type) + '</b><span>' + esc(item.profile) + '</span><code>' + esc(item.mti || '-') + '</code><code>' + esc(item.processing_code || '-') + '</code><span>' + esc(item.detail) + '</span></div>'
+    '<div class="event-row"><time>' + esc(formatEventTimestamp(item.timestamp)) + '</time><b class="event-type ' + esc(item.type.toLowerCase()) + '">' + esc(item.type) + '</b><span>' + esc(item.profile) + '</span><code>' + esc(item.mti || '-') + '</code><code>' + esc(item.processing_code || '-') + '</code><span>' + esc(item.detail) + '</span></div>'
   ).join('') : '<div class="empty">No matching events yet.</div>';
 }
 $('eventFilter').addEventListener('change', () => refreshEvents().catch(() => {}));
