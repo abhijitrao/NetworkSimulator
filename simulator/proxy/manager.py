@@ -14,6 +14,7 @@ class ProxyManager:
         self._lock = threading.RLock()
         self._runtimes: dict[str, ProxyRuntime] = {}
         self.on_event = on_event
+        self.raw_hex_logging = False
 
     def start(self, profile: ProxyProfile) -> None:
         profile.validate()
@@ -27,6 +28,7 @@ class ProxyManager:
                 ):
                     raise ValueError(f"Listener port {profile.listen_port} is already used by profile {profile_id}")
             runtime = ProxyRuntime(profile, on_event=self.on_event)
+            runtime.set_raw_hex_logging(self.raw_hex_logging)
             runtime.start()
             self._runtimes[profile.id] = runtime
 
@@ -42,6 +44,13 @@ class ProxyManager:
             self._runtimes.clear()
         for runtime in runtimes:
             runtime.stop()
+
+    def set_raw_hex_logging(self, enabled: bool) -> None:
+        with self._lock:
+            self.raw_hex_logging = bool(enabled)
+            runtimes = list(self._runtimes.values())
+        for runtime in runtimes:
+            runtime.set_raw_hex_logging(self.raw_hex_logging)
 
     def set_fault(self, profile_id: str, settings: FaultSettings) -> None:
         with self._lock:
