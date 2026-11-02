@@ -47,6 +47,7 @@ class ProxyProfile:
     connect_timeout_ms: int = 10000
     notes: str = ""
     processing_codes: list[str] = field(default_factory=list)
+    raw_hex_logging: bool = False
     fault_profile: FaultSettings = field(default_factory=FaultSettings)
 
     @classmethod
