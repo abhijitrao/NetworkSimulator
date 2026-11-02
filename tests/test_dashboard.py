@@ -68,6 +68,15 @@ class DashboardTests(unittest.TestCase):
         })
         self.assertEqual(response.status_code, 400)
 
+    def test_profile_raw_hex_setting_is_persisted(self):
+        response = self.client.put("/api/profiles/one", json={
+            "name": "Test", "upstream_host": "127.0.0.1", "upstream_port": 9000,
+            "bind_host": "127.0.0.1", "listen_port": 18766, "transport_label": "tcp",
+            "enabled": True, "raw_hex_logging": True,
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(self.client.get("/api/state").json["profiles"][0]["raw_hex_logging"])
+
     def test_raw_hex_capture_is_opt_in_and_disable_clears_raw_events(self):
         initial = self.client.get('/api/diagnostics/raw-hex')
         self.assertFalse(initial.json['enabled'])
