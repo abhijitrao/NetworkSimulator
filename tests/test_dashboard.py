@@ -52,6 +52,43 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json["total"], 2)
 
+    def test_processing_codes_are_saved_for_plain_tcp_profile(self):
+        response = self.client.post("/api/profiles/one/processing-codes", json={
+            "processing_codes": ["960321", "000000", "960321"], "apply_to": "response"
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json["processing_codes"], ["960321", "000000"])
+        saved = ProfileStore(self.config).load()[0]
+        self.assertEqual(saved.processing_codes, ["960321", "000000"])
+        self.assertEqual(saved.fault_profile.apply_to, "response")
+
+    def test_processing_codes_reject_invalid_values(self):
+        response = self.client.post("/api/profiles/one/processing-codes", json={
+            "processing_codes": ["96321", "ABCDEF"]
+        })
+        self.assertEqual(response.status_code, 400)
+
+    def test_profile_raw_hex_setting_is_persisted(self):
+        response = self.client.put("/api/profiles/one", json={
+            "name": "Test", "upstream_host": "127.0.0.1", "upstream_port": 9000,
+            "bind_host": "127.0.0.1", "listen_port": 18766, "transport_label": "tcp",
+            "enabled": True, "raw_hex_logging": True,
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(self.client.get("/api/state").json["profiles"][0]["raw_hex_logging"])
+
+    def test_raw_hex_capture_is_opt_in_and_disable_clears_raw_events(self):
+        initial = self.client.get('/api/diagnostics/raw-hex')
+        self.assertFalse(initial.json['enabled'])
+        enabled = self.client.post('/api/diagnostics/raw-hex', json={'enabled': True})
+        self.assertEqual(enabled.status_code, 200)
+        self.assertTrue(enabled.json['enabled'])
+        self.app.extensions['proxy_manager'].on_event({'timestamp': 1, 'type': 'RAW_REQUEST'})
+        self.app.extensions['proxy_manager'].on_event({'timestamp': 2, 'type': 'RAW_RESPONSE'})
+        disabled = self.client.post('/api/diagnostics/raw-hex', json={'enabled': False})
+        self.assertEqual(disabled.status_code, 200)
+        self.assertFalse(any(e['type'] in {'RAW_REQUEST', 'RAW_RESPONSE'} for e in self.client.get('/api/events').json['events']))
+
     def test_reject_remote_client(self):
         response = self.client.get("/api/state", environ_overrides={"REMOTE_ADDR": "192.0.2.1"})
         self.assertEqual(response.status_code, 403)

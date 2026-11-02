@@ -35,7 +35,17 @@ def create_app(config_path: str | Path = CONFIG_PATH, manager: ProxyManager | No
         static_folder=str(RESOURCE_DIR / "static"),
     )
     store = ProfileStore(config_path)
-    proxy_manager = manager or ProxyManager()
+    event_lock = threading.RLock()
+    event_log: list[dict] = []
+    raw_hex_logging = False  # Always OFF on startup; diagnostic capture is opt-in.
+
+    def record_event(event: dict) -> None:
+        with event_lock:
+            event_log.append(event)
+            del event_log[:-1000]
+
+    proxy_manager = manager or ProxyManager(on_event=record_event)
+    proxy_manager.on_event = record_event
     state_lock = threading.RLock()
 
     if not Path(config_path).exists() and EXAMPLE_PATH.exists():
@@ -146,6 +156,71 @@ def create_app(config_path: str | Path = CONFIG_PATH, manager: ProxyManager | No
             profile.fault_profile = settings
             store.save(items)
         return jsonify(ok=True, fault_profile=vars(settings))
+
+    @app.post("/api/profiles/<profile_id>/processing-codes")
+    def set_processing_codes(profile_id: str):
+        payload = request.get_json(force=True)
+        raw_codes = payload.get("processing_codes", [])
+        if not isinstance(raw_codes, list):
+            return jsonify(error="processing_codes must be an array"), 400
+        codes = list(dict.fromkeys(str(code).strip() for code in raw_codes if str(code).strip()))
+        if any(len(code) != 6 or not code.isdigit() for code in codes):
+            return jsonify(error="Each Processing Code must contain exactly 6 digits"), 400
+        apply_to = payload.get("apply_to")
+        if apply_to is not None and apply_to not in {"request", "response", "both"}:
+            return jsonify(error="apply_to must be request, response or both"), 400
+        with state_lock:
+            items = profiles()
+            profile = find_profile(profile_id, items)
+            if profile.transport_label != "tcp" and codes:
+                return jsonify(error="Processing Code rules are supported only for Plain TCP profiles"), 400
+            profile.processing_codes = codes
+            if apply_to is not None:
+                profile.fault_profile.apply_to = apply_to
+                profile.fault_profile.validate()
+            store.save(items)
+        if apply_to is not None:
+            try:
+                proxy_manager.set_fault(profile_id, profile.fault_profile)
+            except ValueError:
+                pass
+        try:
+            proxy_manager.set_processing_codes(profile_id, codes)
+        except ValueError:
+            # A stopped profile will use the saved values when it starts.
+            pass
+        return jsonify(ok=True, processing_codes=codes, apply_to=apply_to)
+
+    @app.get("/api/diagnostics/raw-hex")
+    def get_raw_hex_setting():
+        return jsonify(enabled=raw_hex_logging)
+
+    @app.post("/api/diagnostics/raw-hex")
+    def set_raw_hex_setting():
+        nonlocal raw_hex_logging
+        payload = request.get_json(force=True) or {}
+        enabled = payload.get("enabled")
+        if not isinstance(enabled, bool):
+            return jsonify(error="enabled must be a boolean"), 400
+        raw_hex_logging = enabled
+        proxy_manager.set_raw_hex_logging(enabled)
+        if not enabled:
+            with event_lock:
+                event_log[:] = [item for item in event_log if item.get("type") not in {"RAW_REQUEST", "RAW_RESPONSE"}]
+        return jsonify(ok=True, enabled=raw_hex_logging)
+
+    @app.get("/api/events")
+    def api_events():
+        since = float(request.args.get("since", "0"))
+        with event_lock:
+            events = [item for item in event_log if item["timestamp"] > since]
+        return jsonify(events=events, raw_hex_logging=raw_hex_logging)
+
+    @app.post("/api/events/clear")
+    def clear_events():
+        with event_lock:
+            event_log.clear()
+        return jsonify(ok=True)
 
     @app.post("/api/profiles/<profile_id>/abort")
     def abort_profile(profile_id: str):

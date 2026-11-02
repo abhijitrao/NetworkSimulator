@@ -7,6 +7,9 @@ A portable-first Windows tool for testing plain TCP and TLS passthrough connecti
 - Concurrent bidirectional TCP relay; TLS is forwarded as opaque bytes without TLS termination.
 - Multiple independent endpoint profiles with separate upstream endpoints and listener ports.
 - Live directional latency, jitter, bandwidth throttling and response/request forwarding pause.
+- Plain-TCP ISO8583 request inspection using the configured 2-byte packed-BCD length, 5-byte TPDU, MTI and primary bitmap; extracts DE 3 only.
+- Per-profile lists of exact six-digit Processing Codes. Matched requests follow the existing Request / Response / Both fault-direction selection to suppress the request, suppress the server response, or both.
+- Live metadata-only Request / Response / Dropped / Parse-error event log with filtering and clear controls; no payment payloads are logged.
 - Best-effort active connection abort.
 - Local HTML dashboard for profile CRUD, duplicate, start/stop, start-all/stop-all, connection status and byte counters.
 - JSON profile import/export with merge or replace mode.
@@ -49,7 +52,7 @@ The proxy does not decrypt TLS. Certificate-chain validation, hostname verificat
 ## Fault semantics and limitations
 
 - Latency/jitter and bandwidth are applied to stream chunks in user space; this is not precise packet-level emulation.
-- Pause POS-to-server forwarding to stall requests; pause server-to-POS forwarding to simulate a delayed/no response while the POS read timeout expires.
+- Pause POS-to-server forwarding to stall requests; pause server-to-POS forwarding to simulate a delayed/no response while the POS read timeout expires. For a matched Processing Code, Request suppresses forwarding to the server, Response forwards the request but suppresses the server reply, and Both suppresses both directions while keeping the POS-side connection open for its read timeout.
 - Abort closes active sockets; exact RST behavior and error codes are OS/timing dependent.
 - Dropping bytes from a TCP stream is not packet-loss simulation. Real packet loss/retransmission, SYN blackholes, Wi-Fi disassociation and whole-device internet outage require an approved gateway/firewall or OS-level test setup.
 

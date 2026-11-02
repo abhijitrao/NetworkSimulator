@@ -10,9 +10,11 @@ LOG = logging.getLogger("posnet.manager")
 
 
 class ProxyManager:
-    def __init__(self):
+    def __init__(self, on_event=None):
         self._lock = threading.RLock()
         self._runtimes: dict[str, ProxyRuntime] = {}
+        self.on_event = on_event
+        self.raw_hex_logging = False
 
     def start(self, profile: ProxyProfile) -> None:
         profile.validate()
@@ -25,7 +27,8 @@ class ProxyManager:
                     runtime.profile.bind_host in {"0.0.0.0", "::"} or profile.bind_host in {"0.0.0.0", "::"}
                 ):
                     raise ValueError(f"Listener port {profile.listen_port} is already used by profile {profile_id}")
-            runtime = ProxyRuntime(profile)
+            runtime = ProxyRuntime(profile, on_event=self.on_event)
+            runtime.set_raw_hex_logging(profile.raw_hex_logging or self.raw_hex_logging)
             runtime.start()
             self._runtimes[profile.id] = runtime
 
@@ -42,12 +45,28 @@ class ProxyManager:
         for runtime in runtimes:
             runtime.stop()
 
+    def set_raw_hex_logging(self, enabled: bool) -> None:
+        with self._lock:
+            self.raw_hex_logging = bool(enabled)
+            runtimes = list(self._runtimes.values())
+        for runtime in runtimes:
+            runtime.set_raw_hex_logging(self.raw_hex_logging)
+
     def set_fault(self, profile_id: str, settings: FaultSettings) -> None:
         with self._lock:
             runtime = self._runtimes.get(profile_id)
         if not runtime or not runtime.running:
             raise ValueError("Proxy profile is not running")
         runtime.set_fault_settings(settings)
+
+    def set_processing_codes(self, profile_id: str, codes: list[str]) -> None:
+        with self._lock:
+            runtime = self._runtimes.get(profile_id)
+        if not runtime or not runtime.running:
+            raise ValueError('Proxy profile is not running')
+        if runtime.profile.transport_label != 'tcp':
+            raise ValueError('Processing Code rules are supported only for Plain TCP profiles')
+        runtime.profile.processing_codes = list(codes)
 
     def abort_connections(self, profile_id: str) -> int:
         with self._lock:

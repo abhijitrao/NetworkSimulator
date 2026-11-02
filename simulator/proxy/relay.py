@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 from ..models import FaultSettings, ProxyProfile
+from .iso8583 import Iso8583FrameError, Iso8583StreamFramer, extract_mti, extract_processing_code
 
 LOG = logging.getLogger("posnet.proxy")
 
@@ -29,9 +30,11 @@ class ConnectionInfo:
 
 
 class ProxyRuntime:
-    def __init__(self, profile: ProxyProfile, on_connection_change: Callable[[], None] | None = None):
+    def __init__(self, profile: ProxyProfile, on_connection_change: Callable[[], None] | None = None, on_event: Callable[[dict], None] | None = None):
         self.profile = profile
         self.on_connection_change = on_connection_change
+        self.on_event = on_event
+        self.raw_hex_logging = False
         self._lock = threading.RLock()
         self._fault_condition = threading.Condition(self._lock)
         self._fault = profile.fault_profile
@@ -49,6 +52,10 @@ class ProxyRuntime:
     def active_connections(self) -> list[ConnectionInfo]:
         with self._lock:
             return list(self._connections.values())
+
+    def set_raw_hex_logging(self, enabled: bool) -> None:
+        with self._lock:
+            self.raw_hex_logging = bool(enabled)
 
     def set_fault_settings(self, settings: FaultSettings) -> None:
         settings.validate()
@@ -131,6 +138,8 @@ class ProxyRuntime:
             self._connections[connection_id] = info
             self._sockets[connection_id] = {client}
         self._notify()
+        suppress_responses = threading.Event()
+        suppressed_code = {'value': ''}
         try:
             if self._stopping.is_set():
                 return
@@ -146,8 +155,8 @@ class ProxyRuntime:
                 return
             LOG.info("[%s] Connected client %s", connection_id, info.client_address)
             workers = [
-                threading.Thread(target=self._pump, args=(client, upstream, info, "client"), daemon=True),
-                threading.Thread(target=self._pump, args=(upstream, client, info, "upstream"), daemon=True),
+                threading.Thread(target=self._pump, args=(client, upstream, info, "client", suppress_responses, suppressed_code), daemon=True),
+                threading.Thread(target=self._pump, args=(upstream, client, info, "upstream", suppress_responses, suppressed_code), daemon=True),
             ]
             for worker in workers:
                 worker.start()
@@ -177,22 +186,108 @@ class ProxyRuntime:
                 self._fault_condition.wait(timeout=0.2)
             return not self._stopping.is_set()
 
-    def _pump(self, source: socket.socket, destination: socket.socket, info: ConnectionInfo, direction: str) -> None:
+    def _emit_event(self, event_type: str, info: ConnectionInfo, processing_code: str = '', detail: str = '', mti: str = '') -> None:
+        if self.on_event:
+            try:
+                self.on_event({'timestamp': time.time(), 'profile_id': self.profile.id, 'profile': self.profile.name, 'connection_id': info.connection_id, 'type': event_type, 'processing_code': processing_code, 'mti': mti, 'detail': detail})
+            except Exception:
+                LOG.exception('Event callback failed')
+
+    def _pump(self, source: socket.socket, destination: socket.socket, info: ConnectionInfo, direction: str, suppress_responses: threading.Event, suppressed_code: dict) -> None:
         counter = "bytes_from_client" if direction == "client" else "bytes_from_upstream"
+        framer = Iso8583StreamFramer() if self.profile.transport_label == 'tcp' else None
         try:
             while not self._stopping.is_set():
                 if not self._wait_for_forwarding(direction):
                     return
                 chunk = source.recv(65536)
                 if not chunk:
-                    try:
-                        destination.shutdown(socket.SHUT_WR)
-                    except OSError:
-                        pass
+                    # If responses are intentionally suppressed, keep the POS-side
+                    # socket open so its own read timeout fires instead of EOF.
+                    if not (direction == 'upstream' and suppress_responses.is_set()):
+                        try:
+                            destination.shutdown(socket.SHUT_WR)
+                        except OSError:
+                            pass
                     return
                 # Re-check after recv: a live pause may have been enabled while recv was blocked.
                 if not self._wait_for_forwarding(direction):
                     return
+
+                if direction == 'upstream':
+                    if self.raw_hex_logging:
+                        preview = chunk[:4096].hex().upper()
+                        suffix = f'... [truncated; {len(chunk)} bytes total]' if len(chunk) > 4096 else ''
+                        self._emit_event('RAW_RESPONSE', info, suppressed_code['value'], f'HEX chunk ({len(chunk)} bytes): {preview}{suffix}')
+                    if suppress_responses.is_set():
+                        self._emit_event('RESPONSE', info, suppressed_code['value'], 'Server response received')
+                        self._emit_event('DROPPED', info, suppressed_code['value'], 'Server response suppressed by Processing Code rule')
+                        continue
+
+                if direction == 'client' and self.raw_hex_logging:
+                    # Diagnostic only: keep capture in memory and bound each event.
+                    preview = chunk[:4096].hex().upper()
+                    suffix = f'... [truncated; {len(chunk)} bytes total]' if len(chunk) > 4096 else ''
+                    self._emit_event('RAW_REQUEST', info, detail=f'HEX chunk ({len(chunk)} bytes): {preview}{suffix}')
+
+                outgoing_chunks = [chunk]
+                if framer is not None:
+                    try:
+                        frames = framer.feed(chunk)
+                    except Iso8583FrameError as exc:
+                        self._emit_event('PARSE_ERROR', info, detail=str(exc))
+                        outgoing_chunks = [framer.take_pending()]
+                        framer = None  # Fail open and preserve buffered plus current bytes.
+                        if direction == 'upstream':
+                            self._emit_event('RESPONSE', info, suppressed_code['value'], 'Server response received')
+                    else:
+                        if direction == 'upstream':
+                            # Response metadata is observational only; never apply
+                            # request Processing Code suppression to server frames.
+                            for frame in frames:
+                                try:
+                                    code = extract_processing_code(frame) or ''
+                                    mti = extract_mti(frame)
+                                except Iso8583FrameError as exc:
+                                    self._emit_event('PARSE_ERROR', info, detail=str(exc))
+                                    code, mti = '', ''
+                                self._emit_event('RESPONSE', info, code, 'Server response received', mti)
+                        # With no suppression rules, inspect complete request frames
+                        # for metadata but forward every original TCP chunk immediately.
+                        elif not self.profile.processing_codes:
+                            outgoing_chunks = [chunk]
+                            for frame in frames:
+                                try:
+                                    code = extract_processing_code(frame)
+                                    mti = extract_mti(frame)
+                                except Iso8583FrameError as exc:
+                                    self._emit_event('PARSE_ERROR', info, detail=str(exc))
+                                    continue
+                                self._emit_event('REQUEST', info, code or '', 'ISO8583 request', mti)
+                        else:
+                            outgoing_chunks = []
+                            for frame in frames:
+                                try:
+                                    code = extract_processing_code(frame)
+                                except Iso8583FrameError as exc:
+                                    self._emit_event('PARSE_ERROR', info, detail=str(exc))
+                                    outgoing_chunks.append(frame)
+                                    continue
+                                self._emit_event('REQUEST', info, code or '', 'ISO8583 request', extract_mti(frame))
+                                if code and code in self.profile.processing_codes:
+                                    rule_direction = self._fault_snapshot().apply_to
+                                    if rule_direction in {'response', 'both'}:
+                                        suppress_responses.set()
+                                        suppressed_code['value'] = code
+                                    if rule_direction in {'request', 'both'}:
+                                        self._emit_event('DROPPED', info, code, 'Request suppressed by Processing Code rule')
+                                        continue
+                                    self._emit_event('MATCHED', info, code, 'Request forwarded; server response suppression armed')
+                                outgoing_chunks.append(frame)
+                        # Partial frames remain buffered until the next TCP chunk.
+
+                if not outgoing_chunks:
+                    continue
 
                 settings = self._fault_snapshot()
                 applies = settings.apply_to == "both" or (settings.apply_to == "request" and direction == "client") or (settings.apply_to == "response" and direction == "upstream")
@@ -206,8 +301,9 @@ class ProxyRuntime:
                 if rate > 0 and self._stopping.wait(len(chunk) / rate):
                     return
 
-                destination.sendall(chunk)
-                setattr(info, counter, getattr(info, counter) + len(chunk))
+                for outgoing in outgoing_chunks:
+                    destination.sendall(outgoing)
+                    setattr(info, counter, getattr(info, counter) + len(outgoing))
         except (ConnectionResetError, BrokenPipeError, OSError) as exc:
             LOG.debug("[%s] %s relay ended: %s", info.connection_id, direction, exc)
             try:

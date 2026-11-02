@@ -3,9 +3,7 @@ name: Build portable Windows EXE
 on:
   workflow_dispatch:
   push:
-    branches:
-      - main
-      - develop
+    branches: [main, develop]
     paths:
       - "app.py"
       - "simulator/**"

@@ -46,6 +46,8 @@ class ProxyProfile:
     enabled: bool = True
     connect_timeout_ms: int = 10000
     notes: str = ""
+    processing_codes: list[str] = field(default_factory=list)
+    raw_hex_logging: bool = False
     fault_profile: FaultSettings = field(default_factory=FaultSettings)
 
     @classmethod
@@ -61,6 +63,8 @@ class ProxyProfile:
             enabled=bool(value.get("enabled", True)),
             connect_timeout_ms=int(value.get("connect_timeout_ms", 10000)),
             notes=str(value.get("notes", "")),
+            processing_codes=[str(code).strip() for code in value.get("processing_codes", []) if str(code).strip()],
+            raw_hex_logging=bool(value.get("raw_hex_logging", False)),
             fault_profile=FaultSettings.from_dict(value.get("fault_profile")),
         )
         profile.validate()
@@ -75,6 +79,11 @@ class ProxyProfile:
             raise ValueError("transport_label must be 'tcp' or 'tls_passthrough'")
         if not 100 <= self.connect_timeout_ms <= 300000:
             raise ValueError("connect_timeout_ms must be between 100 and 300000")
+        if self.transport_label == "tls_passthrough" and self.processing_codes:
+            raise ValueError("Processing Code rules are supported only for Plain TCP profiles")
+        if any(len(code) != 6 or not code.isdigit() for code in self.processing_codes):
+            raise ValueError("Processing Codes must contain exactly 6 digits")
+        self.processing_codes = list(dict.fromkeys(self.processing_codes))
         self.fault_profile.validate()
 
     def to_dict(self) -> dict[str, Any]:
