@@ -218,11 +218,17 @@ class ProxyRuntime:
                         frames = framer.feed(chunk)
                     except Iso8583FrameError as exc:
                         self._emit_event('PARSE_ERROR', info, detail=str(exc))
-                        framer = None  # Fail open and preserve original bytes.
+                        outgoing_chunks = [framer.take_pending()]
+                        framer = None  # Fail open and preserve buffered plus current bytes.
                     else:
                         outgoing_chunks = []
                         for frame in frames:
-                            code = extract_processing_code(frame)
+                            try:
+                                code = extract_processing_code(frame)
+                            except Iso8583FrameError as exc:
+                                self._emit_event('PARSE_ERROR', info, detail=str(exc))
+                                outgoing_chunks.append(frame)
+                                continue
                             self._emit_event('REQUEST', info, code or '', 'ISO8583 request')
                             if code and code in self.profile.processing_codes:
                                 rule_direction = self._fault_snapshot().apply_to
