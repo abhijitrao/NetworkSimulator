@@ -28,7 +28,7 @@ class ProxyManager:
                 ):
                     raise ValueError(f"Listener port {profile.listen_port} is already used by profile {profile_id}")
             runtime = ProxyRuntime(profile, on_event=self.on_event)
-            runtime.set_raw_hex_logging(self.raw_hex_logging)
+            runtime.set_raw_hex_logging(profile.raw_hex_logging or self.raw_hex_logging)
             runtime.start()
             self._runtimes[profile.id] = runtime
 
