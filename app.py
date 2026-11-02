@@ -35,7 +35,16 @@ def create_app(config_path: str | Path = CONFIG_PATH, manager: ProxyManager | No
         static_folder=str(RESOURCE_DIR / "static"),
     )
     store = ProfileStore(config_path)
-    proxy_manager = manager or ProxyManager()
+    event_lock = threading.RLock()
+    event_log: list[dict] = []
+
+    def record_event(event: dict) -> None:
+        with event_lock:
+            event_log.append(event)
+            del event_log[:-1000]
+
+    proxy_manager = manager or ProxyManager(on_event=record_event)
+    proxy_manager.on_event = record_event
     state_lock = threading.RLock()
 
     if not Path(config_path).exists() and EXAMPLE_PATH.exists():
@@ -146,6 +155,42 @@ def create_app(config_path: str | Path = CONFIG_PATH, manager: ProxyManager | No
             profile.fault_profile = settings
             store.save(items)
         return jsonify(ok=True, fault_profile=vars(settings))
+
+    @app.post("/api/profiles/<profile_id>/processing-codes")
+    def set_processing_codes(profile_id: str):
+        payload = request.get_json(force=True)
+        raw_codes = payload.get("processing_codes", [])
+        if not isinstance(raw_codes, list):
+            return jsonify(error="processing_codes must be an array"), 400
+        codes = list(dict.fromkeys(str(code).strip() for code in raw_codes if str(code).strip()))
+        if any(len(code) != 6 or not code.isdigit() for code in codes):
+            return jsonify(error="Each Processing Code must contain exactly 6 digits"), 400
+        with state_lock:
+            items = profiles()
+            profile = find_profile(profile_id, items)
+            if profile.transport_label != "tcp" and codes:
+                return jsonify(error="Processing Code rules are supported only for Plain TCP profiles"), 400
+            profile.processing_codes = codes
+            store.save(items)
+        try:
+            proxy_manager.set_processing_codes(profile_id, codes)
+        except ValueError:
+            # A stopped profile will use the saved values when it starts.
+            pass
+        return jsonify(ok=True, processing_codes=codes)
+
+    @app.get("/api/events")
+    def api_events():
+        since = float(request.args.get("since", "0"))
+        with event_lock:
+            events = [item for item in event_log if item["timestamp"] > since]
+        return jsonify(events=events)
+
+    @app.post("/api/events/clear")
+    def clear_events():
+        with event_lock:
+            event_log.clear()
+        return jsonify(ok=True)
 
     @app.post("/api/profiles/<profile_id>/abort")
     def abort_profile(profile_id: str):
