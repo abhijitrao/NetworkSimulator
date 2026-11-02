@@ -14,17 +14,32 @@ class Iso8583FrameError(ValueError):
 def decode_bcd_length(header: bytes) -> int:
     if len(header) != 2:
         raise Iso8583FrameError("Length header must contain exactly 2 bytes")
+    # Keep compatibility with packed-BCD packets; 00DC-style headers are
+    # two-byte big-endian binary lengths.
     digits = []
     for byte in header:
         for nibble in (byte >> 4, byte & 0x0F):
             if nibble > 9:
-                raise Iso8583FrameError("Invalid packed-BCD length header")
+                return int.from_bytes(header, byteorder="big", signed=False)
             digits.append(str(nibble))
     return int("".join(digits))
 
 
+def extract_mti(frame: bytes) -> str:
+    """Return the four-digit MTI as readable decimal text."""
+    if len(frame) < 9:
+        raise Iso8583FrameError("ISO8583 frame is too short for MTI")
+    digits = []
+    for byte in frame[7:9]:
+        for nibble in (byte >> 4, byte & 0x0F):
+            if nibble > 9:
+                raise Iso8583FrameError("MTI is not packed BCD")
+            digits.append(str(nibble))
+    return "".join(digits)
+
+
 def extract_processing_code(frame: bytes) -> str | None:
-    """Return DE 3 as six decimal digits, or None when bitmap says absent."""
+    """Return DE 3 as six readable decimal digits, or None when absent."""
     if len(frame) < 19:
         raise Iso8583FrameError("ISO8583 frame is too short for TPDU, MTI and bitmap")
     declared = decode_bcd_length(frame[:2])
