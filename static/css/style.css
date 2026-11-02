@@ -18,3 +18,7 @@
 
 /* Keep diagnostic packet HEX readable without widening the event table. */
 .event-row .raw-hex-detail{white-space:normal;overflow-wrap:anywhere;word-break:break-word;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px;line-height:1.5}
+
+/* Show captured request/response HEX inside its metadata row. */
+.inline-raw-hex{margin-top:8px;padding-top:7px;border-top:1px solid var(--border,#263449);white-space:normal;overflow-wrap:anywhere;word-break:break-word;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px;line-height:1.5;color:var(--muted,#9fb2cc)}
+.inline-raw-hex>div+div{margin-top:4px}
