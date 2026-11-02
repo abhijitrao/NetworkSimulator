@@ -134,6 +134,7 @@ class ProxyRuntime:
             self._sockets[connection_id] = {client}
         self._notify()
         suppress_responses = threading.Event()
+        suppressed_code = {'value': ''}
         try:
             if self._stopping.is_set():
                 return
@@ -149,8 +150,8 @@ class ProxyRuntime:
                 return
             LOG.info("[%s] Connected client %s", connection_id, info.client_address)
             workers = [
-                threading.Thread(target=self._pump, args=(client, upstream, info, "client", suppress_responses), daemon=True),
-                threading.Thread(target=self._pump, args=(upstream, client, info, "upstream", suppress_responses), daemon=True),
+                threading.Thread(target=self._pump, args=(client, upstream, info, "client", suppress_responses, suppressed_code), daemon=True),
+                threading.Thread(target=self._pump, args=(upstream, client, info, "upstream", suppress_responses, suppressed_code), daemon=True),
             ]
             for worker in workers:
                 worker.start()
@@ -187,7 +188,7 @@ class ProxyRuntime:
             except Exception:
                 LOG.exception('Event callback failed')
 
-    def _pump(self, source: socket.socket, destination: socket.socket, info: ConnectionInfo, direction: str, suppress_responses: threading.Event) -> None:
+    def _pump(self, source: socket.socket, destination: socket.socket, info: ConnectionInfo, direction: str, suppress_responses: threading.Event, suppressed_code: dict) -> None:
         counter = "bytes_from_client" if direction == "client" else "bytes_from_upstream"
         framer = Iso8583StreamFramer() if direction == 'client' and self.profile.transport_label == 'tcp' and self.profile.processing_codes else None
         try:
@@ -205,9 +206,11 @@ class ProxyRuntime:
                 if not self._wait_for_forwarding(direction):
                     return
 
-                if direction == 'upstream' and suppress_responses.is_set():
-                    self._emit_event('DROPPED', info, detail='Server response suppressed by Processing Code rule')
-                    continue
+                if direction == 'upstream':
+                    self._emit_event('RESPONSE', info, suppressed_code['value'], 'Server response received')
+                    if suppress_responses.is_set():
+                        self._emit_event('DROPPED', info, suppressed_code['value'], 'Server response suppressed by Processing Code rule')
+                        continue
 
                 outgoing_chunks = [chunk]
                 if framer is not None:
@@ -225,6 +228,7 @@ class ProxyRuntime:
                                 rule_direction = self._fault_snapshot().apply_to
                                 if rule_direction in {'response', 'both'}:
                                     suppress_responses.set()
+                                    suppressed_code['value'] = code
                                 self._emit_event('DROPPED', info, code, 'Matched Processing Code rule')
                                 if rule_direction in {'request', 'both'}:
                                     continue
