@@ -59,7 +59,7 @@ class ProcessingCodeProxyTests(unittest.TestCase):
         self.raw_event = threading.Event()
         def record_event(event):
             self.events.append(event)
-            if event.get('type') == 'RAW_REQUEST':
+            if event.get('type') in {'RAW_REQUEST', 'RAW_RESPONSE'}:
                 self.raw_event.set()
         self.manager = ProxyManager(on_event=record_event)
         self.profile = ProxyProfile(
@@ -83,7 +83,7 @@ class ProcessingCodeProxyTests(unittest.TestCase):
             self.assertEqual(RecordingEchoHandler.received[0], SAMPLE)
             with self.assertRaises(socket.timeout):
                 client.recv(4096)
-        self.assertTrue(any(e["type"] == "REQUEST_RECEIVED" for e in self.events))
+        self.assertFalse(any(e["type"] == "REQUEST_RECEIVED" for e in self.events))
         self.assertTrue(any(e["type"] == "REQUEST" and e["processing_code"] == "960321" for e in self.events))
         self.assertTrue(any(e["type"] == "DROPPED" and e["processing_code"] == "960321" for e in self.events))
 
@@ -92,13 +92,18 @@ class ProcessingCodeProxyTests(unittest.TestCase):
         self.manager.set_processing_codes(self.profile.id, [])
         self.manager.set_raw_hex_logging(True)
         with socket.create_connection(('127.0.0.1', self.profile.listen_port), timeout=2) as client:
+            client.settimeout(2)
             client.sendall(SAMPLE)
-            # Wait for the relay thread to publish the diagnostic event before asserting.
-            self.assertTrue(self.raw_event.wait(2), 'RAW_REQUEST event was not emitted')
+            self.assertEqual(client.recv(len(SAMPLE)), SAMPLE)
+            # Both directions should be captured when diagnostics are enabled.
+            self.assertTrue(self.raw_event.wait(2), 'Raw HEX event was not emitted')
         raw_events = [e for e in self.events if e['type'] == 'RAW_REQUEST']
         self.assertTrue(raw_events)
+        response_events = [e for e in self.events if e['type'] == 'RAW_RESPONSE']
+        self.assertTrue(response_events, 'RAW_RESPONSE event was not emitted')
         self.assertTrue(any(e['type'] == 'REQUEST' and e['processing_code'] == '960321' for e in self.events))
         self.assertIn(SAMPLE[:16].hex().upper(), raw_events[0]['detail'])
+        self.assertIn(SAMPLE[:16].hex().upper(), response_events[0]['detail'])
 
     def test_request_rule_does_not_forward_to_server(self):
         self.manager.set_fault(self.profile.id, FaultSettings(apply_to="request"))
