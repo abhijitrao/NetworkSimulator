@@ -80,6 +80,8 @@ class ProcessingCodeProxyTests(unittest.TestCase):
         self.assertTrue(any(e["type"] == "DROPPED" and e["processing_code"] == "960321" for e in self.events))
 
     def test_raw_request_hex_is_emitted_only_when_enabled(self):
+        # This test checks diagnostics only; disable the matching rule so the echo reply is not suppressed.
+        self.manager.set_processing_codes(self.profile.id, [])
         self.manager.set_raw_hex_logging(True)
         with socket.create_connection(('127.0.0.1', self.profile.listen_port), timeout=2) as client:
             client.sendall(SAMPLE)
