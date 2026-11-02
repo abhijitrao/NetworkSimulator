@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 from ..models import FaultSettings, ProxyProfile
+from .iso8583 import Iso8583FrameError, Iso8583StreamFramer, extract_processing_code
 
 LOG = logging.getLogger("posnet.proxy")
 
@@ -29,9 +30,10 @@ class ConnectionInfo:
 
 
 class ProxyRuntime:
-    def __init__(self, profile: ProxyProfile, on_connection_change: Callable[[], None] | None = None):
+    def __init__(self, profile: ProxyProfile, on_connection_change: Callable[[], None] | None = None, on_event: Callable[[dict], None] | None = None):
         self.profile = profile
         self.on_connection_change = on_connection_change
+        self.on_event = on_event
         self._lock = threading.RLock()
         self._fault_condition = threading.Condition(self._lock)
         self._fault = profile.fault_profile
@@ -131,6 +133,7 @@ class ProxyRuntime:
             self._connections[connection_id] = info
             self._sockets[connection_id] = {client}
         self._notify()
+        suppress_responses = threading.Event()
         try:
             if self._stopping.is_set():
                 return
@@ -146,8 +149,8 @@ class ProxyRuntime:
                 return
             LOG.info("[%s] Connected client %s", connection_id, info.client_address)
             workers = [
-                threading.Thread(target=self._pump, args=(client, upstream, info, "client"), daemon=True),
-                threading.Thread(target=self._pump, args=(upstream, client, info, "upstream"), daemon=True),
+                threading.Thread(target=self._pump, args=(client, upstream, info, "client", suppress_responses), daemon=True),
+                threading.Thread(target=self._pump, args=(upstream, client, info, "upstream", suppress_responses), daemon=True),
             ]
             for worker in workers:
                 worker.start()
@@ -177,8 +180,16 @@ class ProxyRuntime:
                 self._fault_condition.wait(timeout=0.2)
             return not self._stopping.is_set()
 
-    def _pump(self, source: socket.socket, destination: socket.socket, info: ConnectionInfo, direction: str) -> None:
+    def _emit_event(self, event_type: str, info: ConnectionInfo, processing_code: str = '', detail: str = '') -> None:
+        if self.on_event:
+            try:
+                self.on_event({'timestamp': time.time(), 'profile_id': self.profile.id, 'profile': self.profile.name, 'connection_id': info.connection_id, 'type': event_type, 'processing_code': processing_code, 'detail': detail})
+            except Exception:
+                LOG.exception('Event callback failed')
+
+    def _pump(self, source: socket.socket, destination: socket.socket, info: ConnectionInfo, direction: str, suppress_responses: threading.Event) -> None:
         counter = "bytes_from_client" if direction == "client" else "bytes_from_upstream"
+        framer = Iso8583StreamFramer() if direction == 'client' and self.profile.transport_label == 'tcp' and self.profile.processing_codes else None
         try:
             while not self._stopping.is_set():
                 if not self._wait_for_forwarding(direction):
@@ -194,6 +205,32 @@ class ProxyRuntime:
                 if not self._wait_for_forwarding(direction):
                     return
 
+                if direction == 'upstream' and suppress_responses.is_set():
+                    self._emit_event('DROPPED', info, detail='Server response suppressed by Processing Code rule')
+                    continue
+
+                outgoing_chunks = [chunk]
+                if framer is not None:
+                    try:
+                        frames = framer.feed(chunk)
+                    except Iso8583FrameError as exc:
+                        self._emit_event('PARSE_ERROR', info, detail=str(exc))
+                        framer = None  # Fail open and preserve original bytes.
+                    else:
+                        outgoing_chunks = []
+                        for frame in frames:
+                            code = extract_processing_code(frame)
+                            self._emit_event('REQUEST', info, code or '', 'ISO8583 request')
+                            if code and code in self.profile.processing_codes:
+                                rule_direction = self._fault_snapshot().apply_to
+                                if rule_direction in {'response', 'both'}:
+                                    suppress_responses.set()
+                                self._emit_event('DROPPED', info, code, 'Matched Processing Code rule')
+                                if rule_direction in {'request', 'both'}:
+                                    continue
+                            outgoing_chunks.append(frame)
+                        # Partial frames remain buffered until the next TCP chunk.
+
                 settings = self._fault_snapshot()
                 applies = settings.apply_to == "both" or (settings.apply_to == "request" and direction == "client") or (settings.apply_to == "response" and direction == "upstream")
                 delay_ms = settings.latency_ms if applies else 0
@@ -206,8 +243,9 @@ class ProxyRuntime:
                 if rate > 0 and self._stopping.wait(len(chunk) / rate):
                     return
 
-                destination.sendall(chunk)
-                setattr(info, counter, getattr(info, counter) + len(chunk))
+                for outgoing in outgoing_chunks:
+                    destination.sendall(outgoing)
+                    setattr(info, counter, getattr(info, counter) + len(outgoing))
         except (ConnectionResetError, BrokenPipeError, OSError) as exc:
             LOG.debug("[%s] %s relay ended: %s", info.connection_id, direction, exc)
             try:
