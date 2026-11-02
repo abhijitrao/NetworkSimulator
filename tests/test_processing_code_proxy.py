@@ -85,8 +85,8 @@ class ProcessingCodeProxyTests(unittest.TestCase):
         self.manager.set_raw_hex_logging(True)
         with socket.create_connection(('127.0.0.1', self.profile.listen_port), timeout=2) as client:
             client.sendall(SAMPLE)
-            client.settimeout(1)
-            client.recv(4096)
+            # No response assertion here: this test verifies request capture only.
+            # The profile's response fault policy is exercised by a separate test.
         raw_events = [e for e in self.events if e['type'] == 'RAW_REQUEST']
         self.assertTrue(raw_events)
         self.assertIn(SAMPLE[:16].hex().upper(), raw_events[0]['detail'])
