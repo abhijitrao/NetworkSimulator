@@ -134,24 +134,12 @@ async function refreshEvents() {
   const filter = $('eventFilter').value;
   const data = await api('/api/events');
   const events = (data.events || []).filter(item => filter === 'all' || (filter === 'REQUEST' ? ['REQUEST_RECEIVED', 'REQUEST'].includes(item.type) : item.type === filter));
-  const rawToggle = $('rawHexToggle');
-  if (rawToggle && rawToggle.checked !== !!data.raw_hex_logging) rawToggle.checked = !!data.raw_hex_logging;
   const target = $('eventLog');
   target.innerHTML = events.length ? events.slice(-200).reverse().map(item =>
-    '<div class="event-row"><time>' + esc(new Date(item.timestamp * 1000).toLocaleTimeString()) + '</time><b class="event-type ' + esc(item.type.toLowerCase()) + '">' + esc(item.type) + '</b><span>' + esc(item.profile) + '</span><code>' + esc(item.processing_code || '-') + '</code><span>' + esc(item.detail) + '</span></div>'
+    '<div class="event-row"><time>' + esc(new Date(item.timestamp * 1000).toLocaleTimeString()) + '</time><b class="event-type ' + esc(item.type.toLowerCase()) + '">' + esc(item.type) + '</b><span>' + esc(item.profile) + '</span><code>' + esc(item.mti || '-') + '</code><code>' + esc(item.processing_code || '-') + '</code><span>' + esc(item.detail) + '</span></div>'
   ).join('') : '<div class="empty">No matching events yet.</div>';
 }
 $('eventFilter').addEventListener('change', () => refreshEvents().catch(() => {}));
-$('rawHexToggle').addEventListener('change', async event => {
-  const toggle = event.target;
-  toggle.disabled = true;
-  try {
-    await api('/api/diagnostics/raw-hex', {method:'POST', body:JSON.stringify({enabled:toggle.checked})});
-    toast(toggle.checked ? 'Raw request HEX capture enabled (sensitive data may be visible)' : 'Raw HEX capture disabled; raw HEX events cleared');
-    await refreshEvents();
-  } catch (e) { toggle.checked = !toggle.checked; toast(e.message); }
-  finally { toggle.disabled = false; }
-});
 $('clearEventsBtn').addEventListener('click', async () => { await api('/api/events/clear',{method:'POST',body:'{}'}); await refreshEvents(); });
 
 async function refresh() {
@@ -178,6 +166,7 @@ function openDialog(profile = null) {
   $('connectTimeout').value = profile?.connect_timeout_ms || 10000;
   $('notes').value = profile?.notes || '';
   $('enabled').checked = profile?.enabled ?? true;
+  $('rawHexLogging').checked = profile?.raw_hex_logging ?? false;
   $('profileDialog').showModal();
 }
 
@@ -186,6 +175,7 @@ function formPayload(id) {
     upstream_host:$('upstreamHost').value.trim(), upstream_port:Number($('upstreamPort').value),
     listen_port:Number($('listenPort').value), bind_host:$('bindHost').value,
     connect_timeout_ms:Number($('connectTimeout').value), notes:$('notes').value.trim(), enabled:$('enabled').checked,
+    raw_hex_logging:$('rawHexLogging').checked,
     fault_profile:{apply_to:'request',latency_ms:0,jitter_ms:0,bandwidth_bytes_per_second:0,pause_client_to_upstream:false,pause_upstream_to_client:false}};
 }
 
