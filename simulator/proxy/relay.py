@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 from ..models import FaultSettings, ProxyProfile
-from .iso8583 import Iso8583FrameError, Iso8583StreamFramer, extract_processing_code
+from .iso8583 import Iso8583FrameError, Iso8583StreamFramer, extract_mti, extract_processing_code
 
 LOG = logging.getLogger("posnet.proxy")
 
@@ -186,10 +186,10 @@ class ProxyRuntime:
                 self._fault_condition.wait(timeout=0.2)
             return not self._stopping.is_set()
 
-    def _emit_event(self, event_type: str, info: ConnectionInfo, processing_code: str = '', detail: str = '') -> None:
+    def _emit_event(self, event_type: str, info: ConnectionInfo, processing_code: str = '', detail: str = '', mti: str = '') -> None:
         if self.on_event:
             try:
-                self.on_event({'timestamp': time.time(), 'profile_id': self.profile.id, 'profile': self.profile.name, 'connection_id': info.connection_id, 'type': event_type, 'processing_code': processing_code, 'detail': detail})
+                self.on_event({'timestamp': time.time(), 'profile_id': self.profile.id, 'profile': self.profile.name, 'connection_id': info.connection_id, 'type': event_type, 'processing_code': processing_code, 'mti': mti, 'detail': detail})
             except Exception:
                 LOG.exception('Event callback failed')
 
@@ -250,7 +250,7 @@ class ProxyRuntime:
                                 self._emit_event('PARSE_ERROR', info, detail=str(exc))
                                 outgoing_chunks.append(frame)
                                 continue
-                            self._emit_event('REQUEST', info, code or '', 'ISO8583 request')
+                            self._emit_event('REQUEST', info, code or '', 'ISO8583 request', extract_mti(frame))
                             if code and code in self.profile.processing_codes:
                                 rule_direction = self._fault_snapshot().apply_to
                                 if rule_direction in {'response', 'both'}:
