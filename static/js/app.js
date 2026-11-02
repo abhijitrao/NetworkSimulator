@@ -140,11 +140,38 @@ function formatEventTimestamp(timestamp) {
 async function refreshEvents() {
   const filter = $('eventFilter').value;
   const data = await api('/api/events');
-  const events = (data.events || []).filter(item => filter === 'all' || (filter === 'REQUEST' ? item.type === 'REQUEST' : item.type === filter));
+  const allEvents = data.events || [];
+  const metadataEvents = allEvents.filter(item => !['RAW_REQUEST', 'RAW_RESPONSE'].includes(item.type));
+  const rawEvents = allEvents.filter(item => ['RAW_REQUEST', 'RAW_RESPONSE'].includes(item.type));
+
+  // Attach each raw packet chunk to the nearest matching metadata event
+  // from the same connection and direction instead of rendering another row.
+  const rawByEvent = new Map();
+  for (const raw of rawEvents) {
+    const metadataType = raw.type === 'RAW_REQUEST' ? 'REQUEST' : 'RESPONSE';
+    const candidates = metadataEvents.filter(item =>
+      item.type === metadataType && item.connection_id === raw.connection_id
+    );
+    if (!candidates.length) continue;
+    const nearest = candidates.reduce((best, item) =>
+      Math.abs(item.timestamp - raw.timestamp) < Math.abs(best.timestamp - raw.timestamp) ? item : best
+    );
+    const key = nearest;
+    if (!rawByEvent.has(key)) rawByEvent.set(key, []);
+    rawByEvent.get(key).push(raw.detail);
+  }
+
+  const events = metadataEvents.filter(item =>
+    filter === 'all' || (filter === 'REQUEST' ? item.type === 'REQUEST' : item.type === filter)
+  );
   const target = $('eventLog');
-  target.innerHTML = events.length ? events.slice(-200).reverse().map(item =>
-    '<div class="event-row"><time>' + esc(formatEventTimestamp(item.timestamp)) + '</time><b class="event-type ' + esc(item.type.toLowerCase()) + '">' + esc(item.type) + '</b><span>' + esc(item.profile) + '</span><code>' + esc(item.mti || '-') + '</code><code>' + esc(item.processing_code || '-') + '</code><span class="' + (item.type === 'RAW_REQUEST' || item.type === 'RAW_RESPONSE' ? 'raw-hex-detail' : '') + '">' + esc(item.detail) + '</span></div>'
-  ).join('') : '<div class="empty">No matching events yet.</div>';
+  target.innerHTML = events.length ? events.slice(-200).reverse().map(item => {
+    const attachedRaw = rawByEvent.get(item) || [];
+    const rawHtml = attachedRaw.length
+      ? '<div class="inline-raw-hex">' + attachedRaw.map(detail => '<div>' + esc(detail) + '</div>').join('') + '</div>'
+      : '';
+    return '<div class="event-row"><time>' + esc(formatEventTimestamp(item.timestamp)) + '</time><b class="event-type ' + esc(item.type.toLowerCase()) + '">' + esc(item.type) + '</b><span>' + esc(item.profile) + '</span><code>' + esc(item.mti || '-') + '</code><code>' + esc(item.processing_code || '-') + '</code><span>' + esc(item.detail) + rawHtml + '</span></div>';
+  }).join('') : '<div class="empty">No matching events yet.</div>';
 }
 $('eventFilter').addEventListener('change', () => refreshEvents().catch(() => {}));
 $('clearEventsBtn').addEventListener('click', async () => { await api('/api/events/clear',{method:'POST',body:'{}'}); await refreshEvents(); });
