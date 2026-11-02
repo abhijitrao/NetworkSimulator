@@ -206,7 +206,7 @@ def create_app(config_path: str | Path = CONFIG_PATH, manager: ProxyManager | No
         proxy_manager.set_raw_hex_logging(enabled)
         if not enabled:
             with event_lock:
-                event_log[:] = [item for item in event_log if item.get("type") != "RAW_REQUEST"]
+                event_log[:] = [item for item in event_log if item.get("type") not in {"RAW_REQUEST", "RAW_RESPONSE"}]
         return jsonify(ok=True, enabled=raw_hex_logging)
 
     @app.get("/api/events")
