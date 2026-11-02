@@ -64,6 +64,7 @@ class ProxyProfile:
             connect_timeout_ms=int(value.get("connect_timeout_ms", 10000)),
             notes=str(value.get("notes", "")),
             processing_codes=[str(code).strip() for code in value.get("processing_codes", []) if str(code).strip()],
+            raw_hex_logging=bool(value.get("raw_hex_logging", False)),
             fault_profile=FaultSettings.from_dict(value.get("fault_profile")),
         )
         profile.validate()
