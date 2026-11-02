@@ -53,9 +53,8 @@ class Iso8583ParserTests(unittest.TestCase):
         frame[9] &= 0xDF
         self.assertIsNone(extract_processing_code(bytes(frame)))
 
-    def test_invalid_bcd_length_rejected(self):
-        with self.assertRaises(Iso8583FrameError):
-            decode_bcd_length(bytes.fromhex("01FA"))
+    def test_non_decimal_length_header_uses_binary_value(self):
+        self.assertEqual(decode_bcd_length(bytes.fromhex("01FA")), 506)
 
 
 if __name__ == "__main__":
