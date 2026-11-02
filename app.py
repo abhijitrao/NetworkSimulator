@@ -165,19 +165,30 @@ def create_app(config_path: str | Path = CONFIG_PATH, manager: ProxyManager | No
         codes = list(dict.fromkeys(str(code).strip() for code in raw_codes if str(code).strip()))
         if any(len(code) != 6 or not code.isdigit() for code in codes):
             return jsonify(error="Each Processing Code must contain exactly 6 digits"), 400
+        apply_to = payload.get("apply_to")
+        if apply_to is not None and apply_to not in {"request", "response", "both"}:
+            return jsonify(error="apply_to must be request, response or both"), 400
         with state_lock:
             items = profiles()
             profile = find_profile(profile_id, items)
             if profile.transport_label != "tcp" and codes:
                 return jsonify(error="Processing Code rules are supported only for Plain TCP profiles"), 400
             profile.processing_codes = codes
+            if apply_to is not None:
+                profile.fault_profile.apply_to = apply_to
+                profile.fault_profile.validate()
             store.save(items)
+        if apply_to is not None:
+            try:
+                proxy_manager.set_fault(profile_id, profile.fault_profile)
+            except ValueError:
+                pass
         try:
             proxy_manager.set_processing_codes(profile_id, codes)
         except ValueError:
             # A stopped profile will use the saved values when it starts.
             pass
-        return jsonify(ok=True, processing_codes=codes)
+        return jsonify(ok=True, processing_codes=codes, apply_to=apply_to)
 
     @app.get("/api/events")
     def api_events():
