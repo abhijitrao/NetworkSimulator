@@ -6,6 +6,7 @@ from simulator.proxy.iso8583 import (
     Iso8583StreamFramer,
     decode_bcd_length,
     extract_processing_code,
+    extract_mti,
 )
 
 
@@ -23,6 +24,18 @@ class Iso8583ParserTests(unittest.TestCase):
         self.assertEqual(decode_bcd_length(SAMPLE[:2]), 145)
         self.assertEqual(len(SAMPLE) - 2, 145)
         self.assertEqual(extract_processing_code(SAMPLE), "960321")
+
+    def test_mti_is_exposed_as_readable_digits(self):
+        self.assertEqual(extract_mti(SAMPLE), "0800")
+
+    def test_binary_length_header_and_processing_code(self):
+        payload = bytes.fromhex("60009100010800202001000081008A982003") + bytes(220 - 18)
+        frame = bytes.fromhex("00DC") + payload
+        self.assertEqual(decode_bcd_length(frame[:2]), 220)
+        self.assertEqual(len(frame) - 2, 220)
+        self.assertEqual(extract_mti(frame), "0800")
+        self.assertEqual(extract_processing_code(frame), "982003")
+        self.assertEqual(Iso8583StreamFramer().feed(frame), [frame])
 
     def test_stream_framer_handles_fragmented_message(self):
         framer = Iso8583StreamFramer()
