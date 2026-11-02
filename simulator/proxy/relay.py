@@ -196,7 +196,6 @@ class ProxyRuntime:
     def _pump(self, source: socket.socket, destination: socket.socket, info: ConnectionInfo, direction: str, suppress_responses: threading.Event, suppressed_code: dict) -> None:
         counter = "bytes_from_client" if direction == "client" else "bytes_from_upstream"
         framer = Iso8583StreamFramer() if direction == 'client' and self.profile.transport_label == 'tcp' else None
-        request_started = False
         try:
             while not self._stopping.is_set():
                 if not self._wait_for_forwarding(direction):
@@ -216,6 +215,10 @@ class ProxyRuntime:
                     return
 
                 if direction == 'upstream':
+                    if self.raw_hex_logging:
+                        preview = chunk[:4096].hex().upper()
+                        suffix = f'... [truncated; {len(chunk)} bytes total]' if len(chunk) > 4096 else ''
+                        self._emit_event('RAW_RESPONSE', info, suppressed_code['value'], f'HEX chunk ({len(chunk)} bytes): {preview}{suffix}')
                     self._emit_event('RESPONSE', info, suppressed_code['value'], 'Server response received')
                     if suppress_responses.is_set():
                         self._emit_event('DROPPED', info, suppressed_code['value'], 'Server response suppressed by Processing Code rule')
@@ -226,18 +229,6 @@ class ProxyRuntime:
                     preview = chunk[:4096].hex().upper()
                     suffix = f'... [truncated; {len(chunk)} bytes total]' if len(chunk) > 4096 else ''
                     self._emit_event('RAW_REQUEST', info, detail=f'HEX chunk ({len(chunk)} bytes): {preview}{suffix}')
-
-                if direction == 'client' and not request_started:
-                    # Log the POS-side request as soon as bytes arrive, even if the
-                    # configured ISO8583 framing cannot decode this stream.
-                    detected_mti = ''
-                    if direction == 'client' and self.profile.transport_label == 'tcp' and framer is None:
-                        try:
-                            detected_mti = extract_mti(chunk)
-                        except Iso8583FrameError:
-                            pass
-                    self._emit_event('REQUEST_RECEIVED', info, detail='POS request data received', mti=detected_mti)
-                    request_started = True
 
                 outgoing_chunks = [chunk]
                 if framer is not None:
