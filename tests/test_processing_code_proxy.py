@@ -79,6 +79,16 @@ class ProcessingCodeProxyTests(unittest.TestCase):
         self.assertTrue(any(e["type"] == "REQUEST" and e["processing_code"] == "960321" for e in self.events))
         self.assertTrue(any(e["type"] == "DROPPED" and e["processing_code"] == "960321" for e in self.events))
 
+    def test_raw_request_hex_is_emitted_only_when_enabled(self):
+        self.manager.set_raw_hex_logging(True)
+        with socket.create_connection(('127.0.0.1', self.profile.listen_port), timeout=2) as client:
+            client.sendall(SAMPLE)
+            client.settimeout(1)
+            client.recv(4096)
+        raw_events = [e for e in self.events if e['type'] == 'RAW_REQUEST']
+        self.assertTrue(raw_events)
+        self.assertIn(SAMPLE[:16].hex().upper(), raw_events[0]['detail'])
+
     def test_request_rule_does_not_forward_to_server(self):
         self.manager.set_fault(self.profile.id, FaultSettings(apply_to="request"))
         with socket.create_connection(("127.0.0.1", self.profile.listen_port), timeout=2) as client:
