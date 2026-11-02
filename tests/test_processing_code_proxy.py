@@ -97,6 +97,7 @@ class ProcessingCodeProxyTests(unittest.TestCase):
             self.assertTrue(self.raw_event.wait(2), 'RAW_REQUEST event was not emitted')
         raw_events = [e for e in self.events if e['type'] == 'RAW_REQUEST']
         self.assertTrue(raw_events)
+        self.assertTrue(any(e['type'] == 'REQUEST' and e['processing_code'] == '960321' for e in self.events))
         self.assertIn(SAMPLE[:16].hex().upper(), raw_events[0]['detail'])
 
     def test_request_rule_does_not_forward_to_server(self):
