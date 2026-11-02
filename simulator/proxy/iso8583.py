@@ -69,6 +69,11 @@ class Iso8583StreamFramer:
             del self._buffer[:total]
         return frames
 
+    def take_pending(self) -> bytes:
+        pending = bytes(self._buffer)
+        self._buffer.clear()
+        return pending
+
     @property
     def pending_bytes(self) -> int:
         return len(self._buffer)
