@@ -34,6 +34,7 @@ class ProxyRuntime:
         self.profile = profile
         self.on_connection_change = on_connection_change
         self.on_event = on_event
+        self.raw_hex_logging = False
         self._lock = threading.RLock()
         self._fault_condition = threading.Condition(self._lock)
         self._fault = profile.fault_profile
@@ -51,6 +52,10 @@ class ProxyRuntime:
     def active_connections(self) -> list[ConnectionInfo]:
         with self._lock:
             return list(self._connections.values())
+
+    def set_raw_hex_logging(self, enabled: bool) -> None:
+        with self._lock:
+            self.raw_hex_logging = bool(enabled)
 
     def set_fault_settings(self, settings: FaultSettings) -> None:
         settings.validate()
@@ -215,6 +220,12 @@ class ProxyRuntime:
                     if suppress_responses.is_set():
                         self._emit_event('DROPPED', info, suppressed_code['value'], 'Server response suppressed by Processing Code rule')
                         continue
+
+                if direction == 'client' and self.raw_hex_logging:
+                    # Diagnostic only: keep capture in memory and bound each event.
+                    preview = chunk[:4096].hex().upper()
+                    suffix = f'... [truncated; {len(chunk)} bytes total]' if len(chunk) > 4096 else ''
+                    self._emit_event('RAW_REQUEST', info, detail=f'HEX chunk ({len(chunk)} bytes): {preview}{suffix}')
 
                 if direction == 'client' and not request_started:
                     # Log the POS-side request as soon as bytes arrive, even if the
