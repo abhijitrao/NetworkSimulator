@@ -196,7 +196,7 @@ $('profileList').addEventListener('click', async (event) => {
     else if (action === 'save-processing-codes') {
       const raw = button.closest('.profile-card').querySelector('[data-processing-codes]').value;
       const codes = raw.split(/[ ,;\\n]+/).map(value => value.trim()).filter(Boolean);
-      await api('/api/profiles/' + encodeURIComponent(id) + '/processing-codes', {method:'POST', body:JSON.stringify({processing_codes:codes})});
+      await api('/api/profiles/' + encodeURIComponent(id) + '/processing-codes', {method:'POST', body:JSON.stringify({processing_codes:codes,apply_to:selectedDirection(button.closest('.profile-card'))})});
       await refresh(); toast('Processing Code rules saved');
     }
     else if (action === 'preset') {
