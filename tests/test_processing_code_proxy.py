@@ -53,7 +53,12 @@ class ProcessingCodeProxyTests(unittest.TestCase):
         probe.close()
 
         self.events = []
-        self.manager = ProxyManager(on_event=self.events.append)
+        self.raw_event = threading.Event()
+        def record_event(event):
+            self.events.append(event)
+            if event.get('type') == 'RAW_REQUEST':
+                self.raw_event.set()
+        self.manager = ProxyManager(on_event=record_event)
         self.profile = ProxyProfile(
             id=str(uuid.uuid4()), name="DE3 test", upstream_host="127.0.0.1",
             upstream_port=self.server.server_address[1], bind_host="127.0.0.1",
@@ -85,8 +90,8 @@ class ProcessingCodeProxyTests(unittest.TestCase):
         self.manager.set_raw_hex_logging(True)
         with socket.create_connection(('127.0.0.1', self.profile.listen_port), timeout=2) as client:
             client.sendall(SAMPLE)
-            # No response assertion here: this test verifies request capture only.
-            # The profile's response fault policy is exercised by a separate test.
+            # Wait for the relay thread to publish the diagnostic event before asserting.
+            self.assertTrue(self.raw_event.wait(2), 'RAW_REQUEST event was not emitted')
         raw_events = [e for e in self.events if e['type'] == 'RAW_REQUEST']
         self.assertTrue(raw_events)
         self.assertIn(SAMPLE[:16].hex().upper(), raw_events[0]['detail'])
