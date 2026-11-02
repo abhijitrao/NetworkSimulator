@@ -39,30 +39,25 @@ def extract_mti(frame: bytes) -> str:
 
 
 def extract_processing_code(frame: bytes) -> str | None:
-    """Return DE 3 as six readable decimal digits, or None when absent."""
-    if len(frame) < 19:
-        raise Iso8583FrameError("ISO8583 frame is too short for TPDU, MTI and bitmap")
+    """Return DE 3 as six ASCII decimal digits, or None when absent."""
+    if len(frame) < 23:
+        raise Iso8583FrameError("ISO8583 frame is too short for DE 3")
     declared = decode_bcd_length(frame[:2])
     if declared != len(frame) - 2:
-        raise Iso8583FrameError("Frame length does not match its BCD header")
+        raise Iso8583FrameError("Frame length does not match its header")
     bitmap = frame[9:17]
-    # Bit 1 in the primary bitmap indicates a secondary bitmap.
     if bitmap[0] & 0x80:
         raise Iso8583FrameError("Secondary bitmap is not supported by this request format")
-    # DE 3 is bitmap bit 3 (MSB-first numbering).
     if not (bitmap[0] & 0x20):
         return None
-    raw = frame[17:20]
-    if len(raw) != 3:
-        raise Iso8583FrameError("DE 3 is incomplete")
-    digits = []
-    for byte in raw:
-        for nibble in (byte >> 4, byte & 0x0F):
-            if nibble > 9:
-                raise Iso8583FrameError("DE 3 is not packed BCD")
-            digits.append(str(nibble))
-    return "".join(digits)
-
+    raw = frame[17:23]
+    try:
+        processing_code = raw.decode("ascii")
+    except UnicodeDecodeError as exc:
+        raise Iso8583FrameError("DE 3 is not ASCII") from exc
+    if len(processing_code) != 6 or not processing_code.isdigit():
+        raise Iso8583FrameError("DE 3 must contain six ASCII digits")
+    return processing_code
 
 class Iso8583StreamFramer:
     """Collect arbitrary TCP chunks and emit complete length-prefixed frames."""
