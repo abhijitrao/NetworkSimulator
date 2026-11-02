@@ -37,6 +37,7 @@ def create_app(config_path: str | Path = CONFIG_PATH, manager: ProxyManager | No
     store = ProfileStore(config_path)
     event_lock = threading.RLock()
     event_log: list[dict] = []
+    raw_hex_logging = False  # Always OFF on startup; diagnostic capture is opt-in.
 
     def record_event(event: dict) -> None:
         with event_lock:
@@ -190,12 +191,30 @@ def create_app(config_path: str | Path = CONFIG_PATH, manager: ProxyManager | No
             pass
         return jsonify(ok=True, processing_codes=codes, apply_to=apply_to)
 
+    @app.get("/api/diagnostics/raw-hex")
+    def get_raw_hex_setting():
+        return jsonify(enabled=raw_hex_logging)
+
+    @app.post("/api/diagnostics/raw-hex")
+    def set_raw_hex_setting():
+        nonlocal raw_hex_logging
+        payload = request.get_json(force=True) or {}
+        enabled = payload.get("enabled")
+        if not isinstance(enabled, bool):
+            return jsonify(error="enabled must be a boolean"), 400
+        raw_hex_logging = enabled
+        proxy_manager.set_raw_hex_logging(enabled)
+        if not enabled:
+            with event_lock:
+                event_log[:] = [item for item in event_log if item.get("type") != "RAW_REQUEST"]
+        return jsonify(ok=True, enabled=raw_hex_logging)
+
     @app.get("/api/events")
     def api_events():
         since = float(request.args.get("since", "0"))
         with event_lock:
             events = [item for item in event_log if item["timestamp"] > since]
-        return jsonify(events=events)
+        return jsonify(events=events, raw_hex_logging=raw_hex_logging)
 
     @app.post("/api/events/clear")
     def clear_events():
