@@ -54,11 +54,13 @@ class DashboardTests(unittest.TestCase):
 
     def test_processing_codes_are_saved_for_plain_tcp_profile(self):
         response = self.client.post("/api/profiles/one/processing-codes", json={
-            "processing_codes": ["960321", "000000", "960321"]
+            "processing_codes": ["960321", "000000", "960321"], "apply_to": "response"
         })
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json["processing_codes"], ["960321", "000000"])
-        self.assertEqual(ProfileStore(self.config).load()[0].processing_codes, ["960321", "000000"])
+        saved = ProfileStore(self.config).load()[0]
+        self.assertEqual(saved.processing_codes, ["960321", "000000"])
+        self.assertEqual(saved.fault_profile.apply_to, "response")
 
     def test_processing_codes_reject_invalid_values(self):
         response = self.client.post("/api/profiles/one/processing-codes", json={
