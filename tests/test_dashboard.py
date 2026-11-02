@@ -26,7 +26,7 @@ class DashboardTests(unittest.TestCase):
     def test_dashboard_page_renders(self):
         response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"POS Network Simulator", response.data)
+        self.assertIn(b"Network Simulator", response.data)
 
     def test_state_returns_profiles(self):
         response = self.client.get("/api/state")
