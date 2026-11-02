@@ -238,9 +238,10 @@ class ProxyRuntime:
                                 if rule_direction in {'response', 'both'}:
                                     suppress_responses.set()
                                     suppressed_code['value'] = code
-                                self._emit_event('DROPPED', info, code, 'Matched Processing Code rule')
                                 if rule_direction in {'request', 'both'}:
+                                    self._emit_event('DROPPED', info, code, 'Request suppressed by Processing Code rule')
                                     continue
+                                self._emit_event('MATCHED', info, code, 'Request forwarded; server response suppression armed')
                             outgoing_chunks.append(frame)
                         # Partial frames remain buffered until the next TCP chunk.
 
