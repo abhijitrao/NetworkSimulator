@@ -248,25 +248,39 @@ class ProxyRuntime:
                         outgoing_chunks = [framer.take_pending()]
                         framer = None  # Fail open and preserve buffered plus current bytes.
                     else:
-                        outgoing_chunks = []
-                        for frame in frames:
-                            try:
-                                code = extract_processing_code(frame)
-                            except Iso8583FrameError as exc:
-                                self._emit_event('PARSE_ERROR', info, detail=str(exc))
-                                outgoing_chunks.append(frame)
-                                continue
-                            self._emit_event('REQUEST', info, code or '', 'ISO8583 request', extract_mti(frame))
-                            if code and code in self.profile.processing_codes:
-                                rule_direction = self._fault_snapshot().apply_to
-                                if rule_direction in {'response', 'both'}:
-                                    suppress_responses.set()
-                                    suppressed_code['value'] = code
-                                if rule_direction in {'request', 'both'}:
-                                    self._emit_event('DROPPED', info, code, 'Request suppressed by Processing Code rule')
+                        # With no suppression rules, inspect complete frames for
+                        # metadata but forward every original TCP chunk immediately.
+                        # This keeps the proxy transparent for non-ISO8583 TCP data.
+                        if not self.profile.processing_codes:
+                            outgoing_chunks = [chunk]
+                            for frame in frames:
+                                try:
+                                    code = extract_processing_code(frame)
+                                    mti = extract_mti(frame)
+                                except Iso8583FrameError as exc:
+                                    self._emit_event('PARSE_ERROR', info, detail=str(exc))
                                     continue
-                                self._emit_event('MATCHED', info, code, 'Request forwarded; server response suppression armed')
-                            outgoing_chunks.append(frame)
+                                self._emit_event('REQUEST', info, code or '', 'ISO8583 request', mti)
+                        else:
+                            outgoing_chunks = []
+                            for frame in frames:
+                                try:
+                                    code = extract_processing_code(frame)
+                                except Iso8583FrameError as exc:
+                                    self._emit_event('PARSE_ERROR', info, detail=str(exc))
+                                    outgoing_chunks.append(frame)
+                                    continue
+                                self._emit_event('REQUEST', info, code or '', 'ISO8583 request', extract_mti(frame))
+                                if code and code in self.profile.processing_codes:
+                                    rule_direction = self._fault_snapshot().apply_to
+                                    if rule_direction in {'response', 'both'}:
+                                        suppress_responses.set()
+                                        suppressed_code['value'] = code
+                                    if rule_direction in {'request', 'both'}:
+                                        self._emit_event('DROPPED', info, code, 'Request suppressed by Processing Code rule')
+                                        continue
+                                    self._emit_event('MATCHED', info, code, 'Request forwarded; server response suppression armed')
+                                outgoing_chunks.append(frame)
                         # Partial frames remain buffered until the next TCP chunk.
 
                 if not outgoing_chunks:
