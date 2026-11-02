@@ -84,9 +84,10 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(enabled.status_code, 200)
         self.assertTrue(enabled.json['enabled'])
         self.app.extensions['proxy_manager'].on_event({'timestamp': 1, 'type': 'RAW_REQUEST'})
+        self.app.extensions['proxy_manager'].on_event({'timestamp': 2, 'type': 'RAW_RESPONSE'})
         disabled = self.client.post('/api/diagnostics/raw-hex', json={'enabled': False})
         self.assertEqual(disabled.status_code, 200)
-        self.assertFalse(any(e['type'] == 'RAW_REQUEST' for e in self.client.get('/api/events').json['events']))
+        self.assertFalse(any(e['type'] in {'RAW_REQUEST', 'RAW_RESPONSE'} for e in self.client.get('/api/events').json['events']))
 
     def test_reject_remote_client(self):
         response = self.client.get("/api/state", environ_overrides={"REMOTE_ADDR": "192.0.2.1"})
