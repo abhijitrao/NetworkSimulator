@@ -36,7 +36,15 @@ function profileCard(p) {
   html += '<button class="small-btn" data-action="duplicate" data-id="' + esc(p.id) + '">Duplicate</button>';
   html += '<button class="small-btn danger" data-action="delete" data-id="' + esc(p.id) + '"' + (running ? ' disabled' : '') + '>Delete</button>';
   if (running) html += '<button class="small-btn danger" data-action="abort" data-id="' + esc(p.id) + '">Abort connections</button>';
-  html += '</div><div class="fault-panel"><div class="fault-title">LIVE FAULT INJECTION</div><div class="fault-direction"><span>Apply faults to</span><label><input type="radio" name="direction-' + esc(p.id) + '" data-direction="request"' + ((fault.apply_to || 'request') === 'request' ? ' checked' : '') + '> Request (POS → Server)</label><label><input type="radio" name="direction-' + esc(p.id) + '" data-direction="response"' + (fault.apply_to === 'response' ? ' checked' : '') + '> Response (Server → POS)</label><label><input type="radio" name="direction-' + esc(p.id) + '" data-direction="both"' + (fault.apply_to === 'both' ? ' checked' : '') + '> Both</label></div><div class="fault-grid">';
+  html += '</div>';
+  if (p.transport_label === 'tcp') {
+    html += '<div class="fault-panel"><div class="fault-title">PROCESSING CODE RULES (DE 3)</div>';
+    html += '<label class="code-rule-label">Comma-separated 6-digit Processing Codes<textarea data-processing-codes rows="2" placeholder="960321, 000000">' + esc((p.processing_codes || []).join(', ')) + '</textarea></label>';
+    html += '<div class="apply-row"><button class="small-btn go" data-action="save-processing-codes" data-id="' + esc(p.id) + '">Save Processing Codes</button></div></div>';
+  } else {
+    html += '<div class="fault-panel"><div class="fault-title">PROCESSING CODE RULES</div><p class="endpoint">Unavailable in TLS passthrough because traffic is encrypted.</p></div>';
+  }
+  html += '<div class="fault-panel"><div class="fault-title">LIVE FAULT INJECTION</div><div class="fault-direction"><span>Apply faults to</span><label><input type="radio" name="direction-' + esc(p.id) + '" data-direction="request"' + ((fault.apply_to || 'request') === 'request' ? ' checked' : '') + '> Request (POS → Server)</label><label><input type="radio" name="direction-' + esc(p.id) + '" data-direction="response"' + (fault.apply_to === 'response' ? ' checked' : '') + '> Response (Server → POS)</label><label><input type="radio" name="direction-' + esc(p.id) + '" data-direction="both"' + (fault.apply_to === 'both' ? ' checked' : '') + '> Both</label></div><div class="fault-grid">';
   html += faultInput('Latency (ms)', 'latency_ms', fault.latency_ms || 0);
   html += faultInput('Jitter (ms)', 'jitter_ms', fault.jitter_ms || 0);
   html += faultInput('Bandwidth (B/s)', 'bandwidth_bytes_per_second', fault.bandwidth_bytes_per_second || 0);
@@ -122,6 +130,18 @@ function renderPosConnections() {
   }).join('');
 }
 
+async function refreshEvents() {
+  const filter = $('eventFilter').value;
+  const data = await api('/api/events');
+  const events = (data.events || []).filter(item => filter === 'all' || item.type === filter);
+  const target = $('eventLog');
+  target.innerHTML = events.length ? events.slice(-200).reverse().map(item =>
+    '<div class="event-row"><time>' + esc(new Date(item.timestamp * 1000).toLocaleTimeString()) + '</time><b class="event-type ' + esc(item.type.toLowerCase()) + '">' + esc(item.type) + '</b><span>' + esc(item.profile) + '</span><code>' + esc(item.processing_code || '-') + '</code><span>' + esc(item.detail) + '</span></div>'
+  ).join('') : '<div class="empty">No matching events yet.</div>';
+}
+$('eventFilter').addEventListener('change', () => refreshEvents().catch(() => {}));
+$('clearEventsBtn').addEventListener('click', async () => { await api('/api/events/clear',{method:'POST',body:'{}'}); await refreshEvents(); });
+
 async function refresh() {
   const data = await api('/api/state');
   state = data.profiles || [];
@@ -130,6 +150,7 @@ async function refresh() {
   $('runningCount').textContent = state.filter(p => runtimeOf(p).running).length;
   $('connectionCount').textContent = state.reduce((n,p) => n + (runtimeOf(p).active_connections || 0), 0);
   renderPosConnections();
+  refreshEvents().catch(() => {});
 }
 
 function openDialog(profile = null) {
@@ -172,6 +193,12 @@ $('profileList').addEventListener('click', async (event) => {
   const id = button.dataset.id, action = button.dataset.action, profile = state.find(p => p.id === id);
   try {
     if (action === 'edit') openDialog(profile);
+    else if (action === 'save-processing-codes') {
+      const raw = button.closest('.profile-card').querySelector('[data-processing-codes]').value;
+      const codes = raw.split(/[ ,;\\n]+/).map(value => value.trim()).filter(Boolean);
+      await api('/api/profiles/' + encodeURIComponent(id) + '/processing-codes', {method:'POST', body:JSON.stringify({processing_codes:codes})});
+      await refresh(); toast('Processing Code rules saved');
+    }
     else if (action === 'preset') {
       const presets = {
         slow: {latency_ms:30000,jitter_ms:0,bandwidth_bytes_per_second:0,pause_client_to_upstream:false,pause_upstream_to_client:false},
@@ -271,6 +298,7 @@ $('importFile').addEventListener('change', async (event) => {
 });
 refresh().catch(e => toast(e.message));
 refreshNetworkInterfaces();
+setInterval(() => { refreshEvents().catch(() => {}); }, 1500);
 setInterval(() => {
   const list = $('profileList');
   if (!list.contains(document.activeElement) && !$('profileDialog').open) refresh().catch(() => {});
