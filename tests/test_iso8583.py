@@ -20,16 +20,19 @@ SAMPLE = bytes.fromhex(
 
 
 class Iso8583ParserTests(unittest.TestCase):
-    def test_sample_packet_has_bcd_length_and_processing_code(self):
-        self.assertEqual(decode_bcd_length(SAMPLE[:2]), 145)
-        self.assertEqual(len(SAMPLE) - 2, 145)
-        self.assertEqual(extract_processing_code(SAMPLE), "960321")
+    def test_sample_packet_with_ascii_processing_code(self):
+        # Replace the sample's three packed bytes with six ASCII digits.
+        frame = SAMPLE[:17] + b"960321" + SAMPLE[20:]
+        frame = bytes.fromhex("0148") + frame[2:]
+        self.assertEqual(decode_bcd_length(frame[:2]), 148)
+        self.assertEqual(len(frame) - 2, 148)
+        self.assertEqual(extract_processing_code(frame), "960321")
 
     def test_mti_is_exposed_as_readable_digits(self):
         self.assertEqual(extract_mti(SAMPLE), "0800")
 
     def test_binary_length_header_and_processing_code(self):
-        payload = bytes.fromhex("60009100010800202001000081008A982003") + bytes(220 - 18)
+        payload = bytes.fromhex("60009100010800202001000081008A") + b"982003" + bytes(220 - 23)
         frame = bytes.fromhex("00DC") + payload
         self.assertEqual(decode_bcd_length(frame[:2]), 220)
         self.assertEqual(len(frame) - 2, 220)
@@ -52,6 +55,12 @@ class Iso8583ParserTests(unittest.TestCase):
         frame = bytearray(SAMPLE)
         frame[9] &= 0xDF
         self.assertIsNone(extract_processing_code(bytes(frame)))
+
+    def test_non_ascii_de3_is_rejected(self):
+        frame = bytearray(bytes.fromhex("00DC60009100010800202001000081008A") + b"982003" + bytes(220 - 23))
+        frame[17] = 0x98
+        with self.assertRaises(Iso8583FrameError):
+            extract_processing_code(bytes(frame))
 
     def test_non_decimal_length_header_uses_binary_value(self):
         self.assertEqual(decode_bcd_length(bytes.fromhex("01FA")), 506)
