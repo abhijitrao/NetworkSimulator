@@ -195,7 +195,7 @@ class ProxyRuntime:
 
     def _pump(self, source: socket.socket, destination: socket.socket, info: ConnectionInfo, direction: str, suppress_responses: threading.Event, suppressed_code: dict) -> None:
         counter = "bytes_from_client" if direction == "client" else "bytes_from_upstream"
-        framer = Iso8583StreamFramer() if direction == 'client' and self.profile.transport_label == 'tcp' and self.profile.processing_codes else None
+        framer = Iso8583StreamFramer() if direction == 'client' and self.profile.transport_label == 'tcp' else None
         request_started = False
         try:
             while not self._stopping.is_set():
