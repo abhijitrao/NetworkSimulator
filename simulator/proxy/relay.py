@@ -197,10 +197,13 @@ class ProxyRuntime:
                     return
                 chunk = source.recv(65536)
                 if not chunk:
-                    try:
-                        destination.shutdown(socket.SHUT_WR)
-                    except OSError:
-                        pass
+                    # If responses are intentionally suppressed, keep the POS-side
+                    # socket open so its own read timeout fires instead of EOF.
+                    if not (direction == 'upstream' and suppress_responses.is_set()):
+                        try:
+                            destination.shutdown(socket.SHUT_WR)
+                        except OSError:
+                            pass
                     return
                 # Re-check after recv: a live pause may have been enabled while recv was blocked.
                 if not self._wait_for_forwarding(direction):
@@ -240,6 +243,9 @@ class ProxyRuntime:
                                     continue
                             outgoing_chunks.append(frame)
                         # Partial frames remain buffered until the next TCP chunk.
+
+                if not outgoing_chunks:
+                    continue
 
                 settings = self._fault_snapshot()
                 applies = settings.apply_to == "both" or (settings.apply_to == "request" and direction == "client") or (settings.apply_to == "response" and direction == "upstream")
