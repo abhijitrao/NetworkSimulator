@@ -32,7 +32,7 @@ class Iso8583ParserTests(unittest.TestCase):
         self.assertEqual(extract_mti(SAMPLE), "0800")
 
     def test_binary_length_header_and_processing_code(self):
-        payload = bytes.fromhex("60009100010800202001000081008A") + b"982003" + bytes(220 - 23)
+        payload = bytes.fromhex("60009100010800202001000081008A") + b"982003" + bytes(220 - 21)
         frame = bytes.fromhex("00DC") + payload
         self.assertEqual(decode_bcd_length(frame[:2]), 220)
         self.assertEqual(len(frame) - 2, 220)
