@@ -57,10 +57,13 @@ class ProcessingCodeProxyTests(unittest.TestCase):
 
         self.events = []
         self.raw_event = threading.Event()
+        self.response_event = threading.Event()
         def record_event(event):
             self.events.append(event)
             if event.get('type') in {'RAW_REQUEST', 'RAW_RESPONSE'}:
                 self.raw_event.set()
+            if event.get('type') == 'RESPONSE':
+                self.response_event.set()
         self.manager = ProxyManager(on_event=record_event)
         self.profile = ProxyProfile(
             id=str(uuid.uuid4()), name="DE3 test", upstream_host="127.0.0.1",
@@ -85,7 +88,6 @@ class ProcessingCodeProxyTests(unittest.TestCase):
                 client.recv(4096)
         self.assertFalse(any(e["type"] == "REQUEST_RECEIVED" for e in self.events))
         self.assertTrue(any(e["type"] == "REQUEST" and e["processing_code"] == "960321" for e in self.events))
-        self.assertTrue(any(e["type"] == "RESPONSE" and e["mti"] == "0800" and e["processing_code"] == "960321" for e in self.events))
         self.assertTrue(any(e["type"] == "DROPPED" and e["processing_code"] == "960321" for e in self.events))
 
     def test_raw_request_hex_is_emitted_only_when_enabled(self):
@@ -96,6 +98,7 @@ class ProcessingCodeProxyTests(unittest.TestCase):
             client.settimeout(2)
             client.sendall(SAMPLE)
             self.assertEqual(client.recv(len(SAMPLE)), SAMPLE)
+            self.assertTrue(self.response_event.wait(2), 'Parsed RESPONSE event was not emitted')
             # Both directions should be captured when diagnostics are enabled.
             self.assertTrue(self.raw_event.wait(2), 'Raw HEX event was not emitted')
         raw_events = [e for e in self.events if e['type'] == 'RAW_REQUEST']
@@ -103,6 +106,7 @@ class ProcessingCodeProxyTests(unittest.TestCase):
         response_events = [e for e in self.events if e['type'] == 'RAW_RESPONSE']
         self.assertTrue(response_events, 'RAW_RESPONSE event was not emitted')
         self.assertTrue(any(e['type'] == 'REQUEST' and e['processing_code'] == '960321' for e in self.events))
+        self.assertTrue(any(e['type'] == 'RESPONSE' and e['mti'] == '0800' and e['processing_code'] == '960321' for e in self.events))
         self.assertIn(SAMPLE[:16].hex().upper(), raw_events[0]['detail'])
         self.assertIn(SAMPLE[:16].hex().upper(), response_events[0]['detail'])
 
