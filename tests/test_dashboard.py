@@ -52,6 +52,20 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json["total"], 2)
 
+    def test_processing_codes_are_saved_for_plain_tcp_profile(self):
+        response = self.client.post("/api/profiles/one/processing-codes", json={
+            "processing_codes": ["960321", "000000", "960321"]
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json["processing_codes"], ["960321", "000000"])
+        self.assertEqual(ProfileStore(self.config).load()[0].processing_codes, ["960321", "000000"])
+
+    def test_processing_codes_reject_invalid_values(self):
+        response = self.client.post("/api/profiles/one/processing-codes", json={
+            "processing_codes": ["96321", "ABCDEF"]
+        })
+        self.assertEqual(response.status_code, 400)
+
     def test_reject_remote_client(self):
         response = self.client.get("/api/state", environ_overrides={"REMOTE_ADDR": "192.0.2.1"})
         self.assertEqual(response.status_code, 403)
