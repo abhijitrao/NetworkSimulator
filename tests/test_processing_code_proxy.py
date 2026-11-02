@@ -85,6 +85,7 @@ class ProcessingCodeProxyTests(unittest.TestCase):
                 client.recv(4096)
         self.assertFalse(any(e["type"] == "REQUEST_RECEIVED" for e in self.events))
         self.assertTrue(any(e["type"] == "REQUEST" and e["processing_code"] == "960321" for e in self.events))
+        self.assertTrue(any(e["type"] == "RESPONSE" and e["mti"] == "0800" and e["processing_code"] == "960321" for e in self.events))
         self.assertTrue(any(e["type"] == "DROPPED" and e["processing_code"] == "960321" for e in self.events))
 
     def test_raw_request_hex_is_emitted_only_when_enabled(self):
