@@ -68,6 +68,17 @@ class DashboardTests(unittest.TestCase):
         })
         self.assertEqual(response.status_code, 400)
 
+    def test_raw_hex_capture_is_opt_in_and_disable_clears_raw_events(self):
+        initial = self.client.get('/api/diagnostics/raw-hex')
+        self.assertFalse(initial.json['enabled'])
+        enabled = self.client.post('/api/diagnostics/raw-hex', json={'enabled': True})
+        self.assertEqual(enabled.status_code, 200)
+        self.assertTrue(enabled.json['enabled'])
+        self.app.extensions['proxy_manager'].on_event({'timestamp': 1, 'type': 'RAW_REQUEST'})
+        disabled = self.client.post('/api/diagnostics/raw-hex', json={'enabled': False})
+        self.assertEqual(disabled.status_code, 200)
+        self.assertFalse(any(e['type'] == 'RAW_REQUEST' for e in self.client.get('/api/events').json['events']))
+
     def test_reject_remote_client(self):
         response = self.client.get("/api/state", environ_overrides={"REMOTE_ADDR": "192.0.2.1"})
         self.assertEqual(response.status_code, 403)
