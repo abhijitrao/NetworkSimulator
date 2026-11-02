@@ -1,4 +1,4 @@
-# POS Network Simulator
+# Network Simulator
 
 A portable-first Windows tool for testing plain TCP and TLS passthrough connectivity from physical Android POS terminals through a configurable local TCP proxy.
 
