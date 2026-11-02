@@ -143,7 +143,7 @@ async function refreshEvents() {
   const events = (data.events || []).filter(item => filter === 'all' || (filter === 'REQUEST' ? item.type === 'REQUEST' : item.type === filter));
   const target = $('eventLog');
   target.innerHTML = events.length ? events.slice(-200).reverse().map(item =>
-    '<div class="event-row"><time>' + esc(formatEventTimestamp(item.timestamp)) + '</time><b class="event-type ' + esc(item.type.toLowerCase()) + '">' + esc(item.type) + '</b><span>' + esc(item.profile) + '</span><code>' + esc(item.mti || '-') + '</code><code>' + esc(item.processing_code || '-') + '</code><span>' + esc(item.detail) + '</span></div>'
+    '<div class="event-row"><time>' + esc(formatEventTimestamp(item.timestamp)) + '</time><b class="event-type ' + esc(item.type.toLowerCase()) + '">' + esc(item.type) + '</b><span>' + esc(item.profile) + '</span><code>' + esc(item.mti || '-') + '</code><code>' + esc(item.processing_code || '-') + '</code><span class="' + (item.type === 'RAW_REQUEST' || item.type === 'RAW_RESPONSE' ? 'raw-hex-detail' : '') + '">' + esc(item.detail) + '</span></div>'
   ).join('') : '<div class="empty">No matching events yet.</div>';
 }
 $('eventFilter').addEventListener('change', () => refreshEvents().catch(() => {}));
