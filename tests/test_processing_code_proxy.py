@@ -75,6 +75,8 @@ class ProcessingCodeProxyTests(unittest.TestCase):
             self.assertEqual(RecordingEchoHandler.received[0], SAMPLE)
             with self.assertRaises(socket.timeout):
                 client.recv(4096)
+        self.assertTrue(any(e["type"] == "REQUEST_RECEIVED" for e in self.events))
+        self.assertTrue(any(e["type"] == "REQUEST" and e["processing_code"] == "960321" for e in self.events))
         self.assertTrue(any(e["type"] == "DROPPED" and e["processing_code"] == "960321" for e in self.events))
 
     def test_request_rule_does_not_forward_to_server(self):
