@@ -10,7 +10,7 @@ from simulator.proxy.manager import ProxyManager
 
 
 SAMPLE = bytes.fromhex(
-    "0148"  # Length increases by 3 bytes: DE 3 is six ASCII bytes.
+    "0145"  # 145 bytes follow the 2-byte length header.
     "60009000010800202001000084010A"  # TPDU, MTI, bitmap and following data
 ) + b"960321" + bytes.fromhex(
     "00000100903633303030303237"
