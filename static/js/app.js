@@ -327,12 +327,12 @@ $('featureForm').addEventListener('submit', async event => {
   const id = $('featureDialogProfileId').value, type = $('featureDialogType').value, raw = $('featureValues').value.trim();
   try {
     if (type === 'processing') {
-      const codes = raw ? raw.split(/[ ,;\\n]+/).map(value => value.trim()).filter(Boolean) : [];
-      if (codes.some(value => !/^\\d{6}$/.test(value))) throw new Error('Each Processing Code must contain exactly 6 digits');
+      const codes = raw ? raw.split(/[ ,;\n]+/).map(value => value.trim()).filter(Boolean) : [];
+      if (codes.some(value => !/^\d{6}$/.test(value))) throw new Error('Each Processing Code must contain exactly 6 digits');
       await api('/api/profiles/' + encodeURIComponent(id) + '/processing-codes', {method:'POST',body:JSON.stringify({processing_codes:codes,enabled:$('featureEnabled').checked})});
     } else {
       const orders = raw ? raw.split(',').map(value => value.trim()).filter(Boolean) : [];
-      if (orders.some(value => !/^\\d+$/.test(value) || Number(value) < 1)) throw new Error('Enter positive request numbers separated by commas, for example: 2, 3, 5');
+      if (orders.some(value => !/^\d+$/.test(value) || Number(value) < 1)) throw new Error('Enter positive request numbers separated by commas, for example: 2, 3, 5');
       await api('/api/profiles/' + encodeURIComponent(id) + '/request-sequence-fault', {method:'POST',body:JSON.stringify({enabled:$('featureEnabled').checked,orders})});
     }
     $('featureDialog').close(); await refresh(); toast('Settings saved');
