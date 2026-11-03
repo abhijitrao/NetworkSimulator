@@ -155,9 +155,9 @@ class ProcessingCodeProxyTests(unittest.TestCase):
         self.assertTrue(any(e["type"] == "SEQUENCE_BLOCKED" and "Request #2" in e["detail"] for e in self.events))
 
     def test_sequence_reset_and_order_change_restart_counter(self):
-        self.manager.configure_request_sequence_fault(True, [2, 3, 5])
+        self.manager.configure_request_sequence_fault(self.profile.id, True, [2, 3, 5])
         self.assertEqual(self.manager._on_request_accepted(self.profile.id), (1, False))
-        self.assertEqual(self.manager._on_request_accepted(), (2, True))
+        self.assertEqual(self.manager._on_request_accepted(self.profile.id), (2, True))
         self.assertEqual(self.manager.reset_request_sequence_fault()["counter"], 0)
         self.assertEqual(self.manager._on_request_accepted(), (1, False))
         status = self.manager.configure_request_sequence_fault(self.profile.id, True, [4])
