@@ -37,20 +37,15 @@ function profileCard(p) {
   html += '<button class="small-btn danger" data-action="delete" data-id="' + esc(p.id) + '"' + (running ? ' disabled' : '') + '>Delete</button>';
   if (running) html += '<button class="small-btn danger" data-action="abort" data-id="' + esc(p.id) + '">Abort connections</button>';
   html += '</div>';
-  if (p.transport_label === 'tcp') {
-    html += '<div class="fault-panel"><div class="fault-title">PROCESSING CODE RULES (DE 3)</div>';
-    html += '<label class="code-rule-label">Comma-separated 6-digit Processing Codes<textarea data-processing-codes rows="2" placeholder="960321, 000000">' + esc((p.processing_codes || []).join(', ')) + '</textarea></label>';
-    html += '<div class="apply-row"><button class="small-btn go" data-action="save-processing-codes" data-id="' + esc(p.id) + '">Save Processing Codes</button></div></div>';
-  } else {
-    html += '<div class="fault-panel"><div class="fault-title">PROCESSING CODE RULES</div><p class="endpoint">Unavailable in TLS passthrough because traffic is encrypted.</p></div>';
-  }
   const sequence = p.request_sequence_fault || {enabled:p.request_sequence_enabled,orders:p.request_sequence_orders || [],counter:0,next_request:1};
-  html += '<div class="fault-panel sequence-profile-panel"><div class="fault-title">REQUEST SEQUENCE BLOCKING</div>';
-  html += '<label class="check"><input type="checkbox" data-sequence-enabled' + (sequence.enabled ? ' checked' : '') + '> Enable request sequence blocking</label>';
-  html += '<label class="sequence-orders-label">Block request numbers (comma-separated)<input type="text" data-sequence-orders value="' + esc((sequence.orders || []).join(', ')) + '" placeholder="2, 3, 5" autocomplete="off"></label>';
-  html += '<div class="apply-row"><button class="small-btn go" data-action="save-sequence" data-id="' + esc(p.id) + '">Save sequence settings</button>';
-  html += '<button class="small-btn" data-action="reset-sequence" data-id="' + esc(p.id) + '">Reset counter</button></div>';
-  html += '<p class="sequence-status">' + (sequence.enabled ? 'Enabled' : 'Disabled') + ' · Counter: ' + sequence.counter + ' · Next request: ' + sequence.next_request + ' · Block: ' + esc((sequence.orders || []).join(', ') || 'None') + '</p></div>';
+  const processingEnabled = p.processing_rules_enabled !== false;
+  html += '<section class="profile-feature"><div class="feature-heading"><strong>PROCESSING CODE RULES (DE 3)</strong><span class="feature-status ' + (p.transport_label === 'tcp' && processingEnabled ? 'on' : '') + '">' + (p.transport_label === 'tcp' ? (processingEnabled ? 'Enabled' : 'Disabled') : 'Unavailable · TLS') + '</span></div>';
+  html += '<div class="feature-detail">' + (p.transport_label === 'tcp' ? esc((p.processing_codes || []).join(', ') || 'No processing codes configured') : 'Encrypted traffic cannot be inspected') + '</div>';
+  if (p.transport_label === 'tcp') html += '<div class="feature-actions"><button class="small-btn" data-action="edit-processing" data-id="' + esc(p.id) + '">Edit</button></div>';
+  html += '</section>';
+  html += '<section class="profile-feature sequence-profile-panel"><div class="feature-heading"><strong>REQUEST SEQUENCE BLOCKING</strong><span class="feature-status ' + (sequence.enabled ? 'on' : '') + '">' + (sequence.enabled ? 'Enabled' : 'Disabled') + '</span></div>';
+  html += '<div class="feature-detail">Sequences: ' + esc((sequence.orders || []).join(', ') || 'None') + ' · Counter: ' + sequence.counter + '</div>';
+  html += '<div class="feature-actions"><button class="small-btn" data-action="reset-sequence" data-id="' + esc(p.id) + '">Reset Counter</button><button class="small-btn" data-action="edit-sequence" data-id="' + esc(p.id) + '">Edit</button></div></section>';
   html += '<div class="fault-panel"><div class="fault-title">LIVE FAULT INJECTION</div><div class="fault-direction"><span>Apply faults to</span><label><input type="radio" name="direction-' + esc(p.id) + '" data-direction="request"' + ((fault.apply_to || 'request') === 'request' ? ' checked' : '') + '> Request (POS → Server)</label><label><input type="radio" name="direction-' + esc(p.id) + '" data-direction="response"' + (fault.apply_to === 'response' ? ' checked' : '') + '> Response (Server → POS)</label><label><input type="radio" name="direction-' + esc(p.id) + '" data-direction="both"' + (fault.apply_to === 'both' ? ' checked' : '') + '> Both</label></div><div class="fault-grid">';
   html += faultInput('Latency (ms)', 'latency_ms', fault.latency_ms || 0);
   html += faultInput('Jitter (ms)', 'jitter_ms', fault.jitter_ms || 0);
@@ -232,6 +227,8 @@ function formPayload(id) {
   return {id: id || undefined, name:$('profileName').value.trim(), transport_label:$('transport').value,
     request_sequence_enabled:existing?.request_sequence_enabled ?? false,
     request_sequence_orders:existing?.request_sequence_orders || [],
+    processing_rules_enabled:existing?.processing_rules_enabled ?? true,
+    processing_codes:existing?.processing_codes || [],
     upstream_host:$('upstreamHost').value.trim(), upstream_port:Number($('upstreamPort').value),
     listen_port:Number($('listenPort').value), bind_host:$('bindHost').value,
     connect_timeout_ms:Number($('connectTimeout').value), notes:$('notes').value.trim(), enabled:$('enabled').checked,
@@ -255,24 +252,13 @@ $('profileList').addEventListener('click', async (event) => {
   const id = button.dataset.id, action = button.dataset.action, profile = state.find(p => p.id === id);
   try {
     if (action === 'edit') openDialog(profile);
-    else if (action === 'save-processing-codes') {
-      const raw = button.closest('.profile-card').querySelector('[data-processing-codes]').value;
-      const codes = raw.split(/[ ,;\\n]+/).map(value => value.trim()).filter(Boolean);
-      await api('/api/profiles/' + encodeURIComponent(id) + '/processing-codes', {method:'POST', body:JSON.stringify({processing_codes:codes,apply_to:selectedDirection(button.closest('.profile-card'))})});
-      await refresh(); toast('Processing Code rules saved');
-    }
-    else if (action === 'save-sequence') {
-      const card = button.closest('.profile-card');
-      const raw = card.querySelector('[data-sequence-orders]').value.trim();
-      const orders = raw ? raw.split(',').map(value => value.trim()).filter(Boolean) : [];
-      if (orders.some(value => !/^\d+$/.test(value) || Number(value) < 1)) {
-        throw new Error('Enter positive request numbers separated by commas, for example: 2, 3, 5');
+    else if (action === 'edit-processing') openFeatureDialog('processing', profile);
+    else if (action === 'edit-sequence') openFeatureDialog('sequence', profile);
+    else if (action === 'reset-sequence') {
+      if (confirm('Reset the request counter for profile "' + profile.name + '" to 0?')) {
+        await api('/api/profiles/' + encodeURIComponent(id) + '/request-sequence-fault/reset', {method:'POST',body:'{}'});
+        await refresh(); toast('Request counter reset for ' + profile.name);
       }
-      await api('/api/profiles/' + encodeURIComponent(id) + '/request-sequence-fault', {method:'POST',body:JSON.stringify({enabled:card.querySelector('[data-sequence-enabled]').checked,orders})});
-      await refresh(); toast('Request sequence settings saved for ' + profile.name);
-    } else if (action === 'reset-sequence') {
-      await api('/api/profiles/' + encodeURIComponent(id) + '/request-sequence-fault/reset', {method:'POST',body:'{}'});
-      await refresh(); toast('Request counter reset for ' + profile.name);
     }
     else if (action === 'preset') {
       const presets = {
@@ -324,6 +310,36 @@ $('profileList').addEventListener('click', async (event) => {
     }
   } catch(e) { toast(e.message); }
 });
+
+function openFeatureDialog(type, profile) {
+  const sequence = profile.request_sequence_fault || {enabled:profile.request_sequence_enabled,orders:profile.request_sequence_orders || []};
+  $('featureDialogTitle').textContent = type === 'processing' ? 'Processing Code Rules (DE 3)' : 'Request Sequence Blocking';
+  $('featureDialogType').value = type;
+  $('featureDialogProfileId').value = profile.id;
+  $('featureEnabled').checked = type === 'processing' ? profile.processing_rules_enabled !== false : !!sequence.enabled;
+  $('featureValuesLabel').textContent = type === 'processing' ? 'Processing Codes (6 digits, comma-separated)' : 'Block request numbers (comma-separated)';
+  $('featureValues').value = type === 'processing' ? (profile.processing_codes || []).join(', ') : (sequence.orders || []).join(', ');
+  $('featureValues').placeholder = type === 'processing' ? '000000, 003000' : '2, 3, 5';
+  $('featureDialog').showModal();
+}
+$('featureForm').addEventListener('submit', async event => {
+  event.preventDefault();
+  const id = $('featureDialogProfileId').value, type = $('featureDialogType').value, raw = $('featureValues').value.trim();
+  try {
+    if (type === 'processing') {
+      const codes = raw ? raw.split(/[ ,;\\n]+/).map(value => value.trim()).filter(Boolean) : [];
+      if (codes.some(value => !/^\\d{6}$/.test(value))) throw new Error('Each Processing Code must contain exactly 6 digits');
+      await api('/api/profiles/' + encodeURIComponent(id) + '/processing-codes', {method:'POST',body:JSON.stringify({processing_codes:codes,enabled:$('featureEnabled').checked})});
+    } else {
+      const orders = raw ? raw.split(',').map(value => value.trim()).filter(Boolean) : [];
+      if (orders.some(value => !/^\\d+$/.test(value) || Number(value) < 1)) throw new Error('Enter positive request numbers separated by commas, for example: 2, 3, 5');
+      await api('/api/profiles/' + encodeURIComponent(id) + '/request-sequence-fault', {method:'POST',body:JSON.stringify({enabled:$('featureEnabled').checked,orders})});
+    }
+    $('featureDialog').close(); await refresh(); toast('Settings saved');
+  } catch(e) { toast(e.message); }
+});
+$('closeFeatureDialog').addEventListener('click', () => $('featureDialog').close());
+$('cancelFeatureDialog').addEventListener('click', () => $('featureDialog').close());
 
 $('addProfileBtn').addEventListener('click', () => openDialog());
 $('closeDialog').addEventListener('click', () => $('profileDialog').close());
