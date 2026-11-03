@@ -62,7 +62,7 @@ function profileCard(p) {
   html += '<div class="feature-detail sequence-summary"><span>Blocking Sequences: ' + esc((sequence.orders || []).join(', ') || 'None') + '</span><span>Counter: ' + esc(sequence.counter ?? 0) + ', Next Counter: ' + esc(sequence.next_request ?? ((Number(sequence.counter) || 0) + 1)) + '</span></div>';
   html += '<div class="feature-actions"><button class="small-btn" data-action="reset-sequence" data-id="' + esc(p.id) + '">Reset Counter</button><button class="small-btn" data-action="edit-sequence" data-id="' + esc(p.id) + '">Edit</button></div></section>';
   html += '</div>';
-  html += '<div class="fault-panel"><div class="fault-title">LIVE FAULT INJECTION</div><div class="fault-direction"><span>Apply faults to</span><label><input type="radio" name="direction-' + esc(p.id) + '" data-direction="request"' + ((fault.apply_to || 'request') === 'request' ? ' checked' : '') + '> Request (POS → Server)</label><label><input type="radio" name="direction-' + esc(p.id) + '" data-direction="response"' + (fault.apply_to === 'response' ? ' checked' : '') + '> Response (Server → POS)</label><label><input type="radio" name="direction-' + esc(p.id) + '" data-direction="both"' + (fault.apply_to === 'both' ? ' checked' : '') + '> Both</label></div><div class="fault-grid">';
+  html += '<div class="fault-panel"><div class="fault-title">LIVE FAULT INJECTION</div><div class="fault-direction"><span>Apply faults to</span><label><input type="radio" name="direction-' + esc(p.id) + '" data-direction="request"' + ((fault.apply_to || 'request') === 'request' ? ' checked' : '') + '> Request (App → Server)</label><label><input type="radio" name="direction-' + esc(p.id) + '" data-direction="response"' + (fault.apply_to === 'response' ? ' checked' : '') + '> Response (Server → App)</label><label><input type="radio" name="direction-' + esc(p.id) + '" data-direction="both"' + (fault.apply_to === 'both' ? ' checked' : '') + '> Both</label></div><div class="fault-grid">';
   html += faultInput('Latency (ms)', 'latency_ms', fault.latency_ms || 0);
   html += faultInput('Jitter (ms)', 'jitter_ms', fault.jitter_ms || 0);
   html += faultInput('Bandwidth (B/s)', 'bandwidth_bytes_per_second', fault.bandwidth_bytes_per_second || 0);
@@ -77,7 +77,7 @@ function profileCard(p) {
   html += '<button class="small-btn custom-apply ' + (activeFault === 'custom' ? 'active' : '') + '" data-action="apply-fault" data-id="' + esc(p.id) + '"' + (running ? '' : ' disabled title="Start proxy first"') + '>Apply custom</button></div></div>';
   if (rt.connections && rt.connections.length) {
     html += '<div class="fault-panel"><div class="fault-title">ACTIVE CONNECTIONS</div>';
-    rt.connections.forEach(c => { html += '<div class="endpoint">' + esc(c.client) + ' · POS → Server ' + c.bytes_from_client + ' B · Server → POS ' + c.bytes_from_upstream + ' B</div>'; });
+    rt.connections.forEach(c => { html += '<div class="endpoint">' + esc(c.client) + ' · App → Server ' + c.bytes_from_client + ' B · Server → App ' + c.bytes_from_upstream + ' B</div>'; });
     html += '</div>';
   }
   return html + '</article>';
@@ -134,16 +134,16 @@ function renderPosConnections() {
   }
   const enabledProfiles = state.filter(p => p.enabled);
   if (!enabledProfiles.length) {
-    target.innerHTML = '<div class="empty">Enable a profile to display its POS connection details.</div>';
+    target.innerHTML = '<div class="empty">Enable a profile to display its App connection details.</div>';
     return;
   }
   target.innerHTML = enabledProfiles.map(p => {
     const endpoint = host + ':' + p.listen_port;
     const running = !!runtimeOf(p).running;
     return '<article class="pos-connection-card"><div class="pos-connection-top"><strong>' + esc(p.name) + '</strong><span class="status ' + (running ? 'running' : '') + '">' + (running ? '● Running' : '○ Stopped') + '</span></div>' +
-      '<p class="pos-instruction">Enter these details in POS Device → Server Configuration</p>' +
+      '<p class="pos-instruction">Enter these details in App → Server Configuration</p>' +
       '<div class="pos-endpoint">' + esc(endpoint) + '</div>' +
-      '<div class="pos-fields"><span>POS Server IP <b>' + esc(host) + '</b></span><span>POS Server Port <b>' + p.listen_port + '</b></span></div>' +
+      '<div class="pos-fields"><span>App Server IP <b>' + esc(host) + '</b></span><span>App Server Port <b>' + p.listen_port + '</b></span></div>' +
       '<button class="small-btn copy-endpoint" type="button" data-copy="' + esc(endpoint) + '">Copy IP:Port</button></article>';
   }).join('');
 }
