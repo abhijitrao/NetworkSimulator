@@ -47,6 +47,7 @@ class ProxyProfile:
     connect_timeout_ms: int = 10000
     notes: str = ""
     processing_codes: list[str] = field(default_factory=list)
+    processing_rules_enabled: bool = True
     raw_hex_logging: bool = False
     request_sequence_enabled: bool = False
     request_sequence_orders: list[int] = field(default_factory=list)
@@ -66,6 +67,7 @@ class ProxyProfile:
             connect_timeout_ms=int(value.get("connect_timeout_ms", 10000)),
             notes=str(value.get("notes", "")),
             processing_codes=[str(code).strip() for code in value.get("processing_codes", []) if str(code).strip()],
+            processing_rules_enabled=bool(value.get("processing_rules_enabled", True)),
             raw_hex_logging=bool(value.get("raw_hex_logging", False)),
             request_sequence_enabled=bool(value.get("request_sequence_enabled", False)),
             request_sequence_orders=sorted(set(int(order) for order in value.get("request_sequence_orders", []))),
