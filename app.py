@@ -217,8 +217,8 @@ def create_app(config_path: str | Path = CONFIG_PATH, manager: ProxyManager | No
             response_hex = "".join(str(item.get("response_hex", "")).split()).upper()
             if len(code) != 6 or not code.isdigit():
                 return jsonify(error="Each Processing Code must contain exactly 6 digits"), 400
-            if action not in {"block", "alter_response"}:
-                return jsonify(error="Action must be block or alter_response"), 400
+            if action not in {"none", "block", "alter_response"}:
+                return jsonify(error="Action must be none, block or alter_response"), 400
             if action == "alter_response" and (not response_hex or len(response_hex) % 2 or any(ch not in "0123456789ABCDEF" for ch in response_hex)):
                 return jsonify(error=f"Processing Code {code}: response must be valid, even-length HEX"), 400
             rules[code] = {"action": action, "response_hex": response_hex if action == "alter_response" else ""}
@@ -230,6 +230,10 @@ def create_app(config_path: str | Path = CONFIG_PATH, manager: ProxyManager | No
             profile.processing_code_rules = rules
             profile.processing_codes = list(rules)
             profile.processing_rules_enabled = enabled
+            try:
+                profile.validate()
+            except ValueError as exc:
+                return jsonify(error=str(exc)), 400
             store.save(items)
         try:
             proxy_manager.set_processing_code_rules(profile_id, rules, enabled)
