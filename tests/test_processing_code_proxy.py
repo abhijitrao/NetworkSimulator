@@ -121,7 +121,7 @@ class ProcessingCodeProxyTests(unittest.TestCase):
         self.assertTrue(any(e["type"] == "DROPPED" and e["processing_code"] == "960321" for e in self.events))
 
 
-    def test_global_request_sequence_blocks_selected_connection_responses(self):
+    def test_profile_request_sequence_blocks_selected_connection_responses(self):
         self.manager.set_processing_codes(self.profile.id, [])
         self.manager.configure_request_sequence_fault(self.profile.id, True, [2, 3, 5])
         tls_profile = ProxyProfile.from_dict({
@@ -139,7 +139,7 @@ class ProcessingCodeProxyTests(unittest.TestCase):
             first.settimeout(2)
             first.sendall(SAMPLE)
             self.assertEqual(first.recv(len(SAMPLE)), SAMPLE)
-        self.assertEqual(self.manager.request_sequence_status()["counter"], 1)
+        self.assertEqual(self.manager.request_sequence_status(self.profile.id)["counter"], 1)
 
         # Request 2 is still forwarded to the host, but its response is not returned.
         RecordingEchoHandler.received_event.clear()
@@ -158,7 +158,7 @@ class ProcessingCodeProxyTests(unittest.TestCase):
         self.manager.configure_request_sequence_fault(self.profile.id, True, [2, 3, 5])
         self.assertEqual(self.manager._on_request_accepted(self.profile.id), (1, False))
         self.assertEqual(self.manager._on_request_accepted(self.profile.id), (2, True))
-        self.assertEqual(self.manager.reset_request_sequence_fault()["counter"], 0)
+        self.assertEqual(self.manager.reset_request_sequence_fault(self.profile.id)["counter"], 0)
         self.assertEqual(self.manager._on_request_accepted(self.profile.id), (1, False))
         status = self.manager.configure_request_sequence_fault(self.profile.id, True, [4])
         self.assertEqual(status["counter"], 0)
