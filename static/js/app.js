@@ -165,7 +165,7 @@ async function refreshEvents() {
     filter === 'all' || (filter === 'REQUEST' ? item.type === 'REQUEST' : item.type === filter)
   );
   const target = $('eventLog');
-  target.innerHTML = events.length ? events.slice(-200).reverse().map(item => {
+  target.innerHTML = events.length ? events.slice(-200).sort((a, b) => a.timestamp - b.timestamp).map(item => {
     const attachedRaw = rawByEvent.get(item) || [];
     const rawHtml = attachedRaw.length
       ? '<div class="inline-raw-hex">' + attachedRaw.map(detail => '<div>' + esc(detail) + '</div>').join('') + '</div>'
