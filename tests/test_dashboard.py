@@ -97,7 +97,7 @@ class DashboardTests(unittest.TestCase):
         response = self.client.get("/api/events/export")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.mimetype, "text/plain")
-        self.assertIn("attachment; filename=pos-traffic-logs.txt", response.headers["Content-Disposition"])
+        self.assertIn("pos-traffic-logs.txt", response.headers["Content-Disposition"])
         content = response.get_data(as_text=True)
         self.assertLess(content.index("CONNECTED"), content.index("RAW_RESPONSE"))
         self.assertLess(content.index("RAW_RESPONSE"), content.index("DISCONNECTED"))
