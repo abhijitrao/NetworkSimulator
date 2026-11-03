@@ -122,6 +122,7 @@ class ProcessingCodeProxyTests(unittest.TestCase):
 
 
     def test_global_request_sequence_blocks_selected_connection_responses(self):
+        self.manager.set_processing_codes(self.profile.id, [])
         self.manager.configure_request_sequence_fault(True, [2, 3, 5])
 
         # Request 1 is forwarded and its echo response reaches the POS.
