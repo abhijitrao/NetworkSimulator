@@ -228,7 +228,10 @@ function openDialog(profile = null) {
 }
 
 function formPayload(id) {
+  const existing = state.find(profile => profile.id === id);
   return {id: id || undefined, name:$('profileName').value.trim(), transport_label:$('transport').value,
+    request_sequence_enabled:existing?.request_sequence_enabled ?? false,
+    request_sequence_orders:existing?.request_sequence_orders || [],
     upstream_host:$('upstreamHost').value.trim(), upstream_port:Number($('upstreamPort').value),
     listen_port:Number($('listenPort').value), bind_host:$('bindHost').value,
     connect_timeout_ms:Number($('connectTimeout').value), notes:$('notes').value.trim(), enabled:$('enabled').checked,
