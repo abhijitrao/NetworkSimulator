@@ -3,6 +3,7 @@ let state = [];
 let toastTimer;
 let networkInterfaces = [];
 let selectedNetworkIp = '';
+let sequenceFault = {enabled:false,orders:[],counter:0,next_request:1};
 
 function toast(message) {
   const el = $('toast');
@@ -195,6 +196,10 @@ $('clearEventsBtn').addEventListener('click', async () => { await api('/api/even
 async function refresh() {
   const data = await api('/api/state');
   state = data.profiles || [];
+  sequenceFault = data.request_sequence_fault || sequenceFault;
+  $('sequenceEnabled').checked = !!sequenceFault.enabled;
+  if (document.activeElement !== $('sequenceOrders')) $('sequenceOrders').value = (sequenceFault.orders || []).join(', ');
+  $('sequenceStatus').textContent = (sequenceFault.enabled ? 'Enabled' : 'Disabled') + ' · Counter: ' + sequenceFault.counter + ' · Next request: ' + sequenceFault.next_request + ' · Block: ' + ((sequenceFault.orders || []).join(', ') || 'None');
   $('profileList').innerHTML = state.length ? state.map(profileCard).join('') : '<div class="empty">No profiles yet. Add your first UAT endpoint to get started.</div>';
   $('profileCount').textContent = state.length;
   $('runningCount').textContent = state.filter(p => runtimeOf(p).running).length;
@@ -299,6 +304,27 @@ $('profileList').addEventListener('click', async (event) => {
       await api('/api/profiles/' + encodeURIComponent(id) + '/fault',{method:'POST',body:JSON.stringify(payload)});
       await refresh(); toast('Fault settings applied live');
     }
+  } catch(e) { toast(e.message); }
+});
+
+$('saveSequenceBtn').addEventListener('click', async () => {
+  try {
+    const raw = $('sequenceOrders').value.trim();
+    const orders = raw ? raw.split(',').map(value => value.trim()).filter(Boolean) : [];
+    if (orders.some(value => !/^\\d+$/.test(value) || Number(value) < 1)) {
+      throw new Error('Enter positive request numbers separated by commas, for example: 2, 3, 5');
+    }
+    const result = await api('/api/request-sequence-fault', {method:'POST', body:JSON.stringify({enabled:$('sequenceEnabled').checked, orders})});
+    sequenceFault = result;
+    await refresh();
+    toast('Request sequence settings saved; counter started from 1');
+  } catch(e) { toast(e.message); }
+});
+$('resetSequenceBtn').addEventListener('click', async () => {
+  try {
+    sequenceFault = await api('/api/request-sequence-fault/reset', {method:'POST', body:'{}'});
+    await refresh();
+    toast('Request counter reset; next request will be #1');
   } catch(e) { toast(e.message); }
 });
 
