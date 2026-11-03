@@ -124,8 +124,17 @@ class ProcessingCodeProxyTests(unittest.TestCase):
     def test_global_request_sequence_blocks_selected_connection_responses(self):
         self.manager.set_processing_codes(self.profile.id, [])
         self.manager.configure_request_sequence_fault(True, [2, 3, 5])
+        tls_profile = ProxyProfile.from_dict({
+            **self.profile.to_dict(),
+            "id": str(uuid.uuid4()),
+            "name": "TLS sequence test",
+            "listen_port": self.profile.listen_port + 1,
+            "transport_label": "tls_passthrough",
+            "processing_codes": [],
+        })
+        self.manager.start(tls_profile)
 
-        # Request 1 is forwarded and its echo response reaches the POS.
+        # Request 1 on TCP is forwarded and its echo response reaches the POS.
         with socket.create_connection(("127.0.0.1", self.profile.listen_port), timeout=2) as first:
             first.settimeout(2)
             first.sendall(SAMPLE)
