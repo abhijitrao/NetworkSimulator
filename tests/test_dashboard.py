@@ -91,9 +91,9 @@ class DashboardTests(unittest.TestCase):
 
     def test_export_traffic_logs_as_text_oldest_first_including_raw_hex(self):
         manager = self.app.extensions["proxy_manager"]
-        manager.on_event({"timestamp": 20, "type": "RAW_RESPONSE", "profile": "Test", "mti": "", "processing_code": "", "connection_id": "c2", "detail": "HEX chunk AABB"})
-        manager.on_event({"timestamp": 10, "type": "CONNECTED", "profile": "Test", "mti": "", "processing_code": "", "connection_id": "c1", "detail": "TCP connection established"})
-        manager.on_event({"timestamp": 30, "type": "DISCONNECTED", "profile": "Test", "mti": "", "processing_code": "", "connection_id": "c1", "detail": "Connection closed"})
+        manager.on_event({"timestamp": 1700000020, "type": "RAW_RESPONSE", "profile": "Test", "mti": "", "processing_code": "", "connection_id": "c2", "detail": "HEX chunk AABB"})
+        manager.on_event({"timestamp": 1700000010, "type": "CONNECTED", "profile": "Test", "mti": "", "processing_code": "", "connection_id": "c1", "detail": "TCP connection established"})
+        manager.on_event({"timestamp": 1700000030, "type": "DISCONNECTED", "profile": "Test", "mti": "", "processing_code": "", "connection_id": "c1", "detail": "Connection closed"})
         response = self.client.get("/api/events/export")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.mimetype, "text/plain")
