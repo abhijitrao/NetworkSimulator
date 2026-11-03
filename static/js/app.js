@@ -3,7 +3,6 @@ let state = [];
 let toastTimer;
 let networkInterfaces = [];
 let selectedNetworkIp = '';
-let sequenceFault = {enabled:false,orders:[],counter:0,next_request:1};
 
 function toast(message) {
   const el = $('toast');
@@ -45,6 +44,13 @@ function profileCard(p) {
   } else {
     html += '<div class="fault-panel"><div class="fault-title">PROCESSING CODE RULES</div><p class="endpoint">Unavailable in TLS passthrough because traffic is encrypted.</p></div>';
   }
+  const sequence = p.request_sequence_fault || {enabled:p.request_sequence_enabled,orders:p.request_sequence_orders || [],counter:0,next_request:1};
+  html += '<div class="fault-panel sequence-profile-panel"><div class="fault-title">REQUEST SEQUENCE BLOCKING</div>';
+  html += '<label class="check"><input type="checkbox" data-sequence-enabled' + (sequence.enabled ? ' checked' : '') + '> Enable request sequence blocking</label>';
+  html += '<label class="sequence-orders-label">Block request numbers (comma-separated)<input type="text" data-sequence-orders value="' + esc((sequence.orders || []).join(', ')) + '" placeholder="2, 3, 5" autocomplete="off"></label>';
+  html += '<div class="apply-row"><button class="small-btn go" data-action="save-sequence" data-id="' + esc(p.id) + '">Save sequence settings</button>';
+  html += '<button class="small-btn" data-action="reset-sequence" data-id="' + esc(p.id) + '">Reset counter</button></div>';
+  html += '<p class="sequence-status">' + (sequence.enabled ? 'Enabled' : 'Disabled') + ' · Counter: ' + sequence.counter + ' · Next request: ' + sequence.next_request + ' · Block: ' + esc((sequence.orders || []).join(', ') || 'None') + '</p></div>';
   html += '<div class="fault-panel"><div class="fault-title">LIVE FAULT INJECTION</div><div class="fault-direction"><span>Apply faults to</span><label><input type="radio" name="direction-' + esc(p.id) + '" data-direction="request"' + ((fault.apply_to || 'request') === 'request' ? ' checked' : '') + '> Request (POS → Server)</label><label><input type="radio" name="direction-' + esc(p.id) + '" data-direction="response"' + (fault.apply_to === 'response' ? ' checked' : '') + '> Response (Server → POS)</label><label><input type="radio" name="direction-' + esc(p.id) + '" data-direction="both"' + (fault.apply_to === 'both' ? ' checked' : '') + '> Both</label></div><div class="fault-grid">';
   html += faultInput('Latency (ms)', 'latency_ms', fault.latency_ms || 0);
   html += faultInput('Jitter (ms)', 'jitter_ms', fault.jitter_ms || 0);
@@ -196,10 +202,6 @@ $('clearEventsBtn').addEventListener('click', async () => { await api('/api/even
 async function refresh() {
   const data = await api('/api/state');
   state = data.profiles || [];
-  sequenceFault = data.request_sequence_fault || sequenceFault;
-  $('sequenceEnabled').checked = !!sequenceFault.enabled;
-  if (document.activeElement !== $('sequenceOrders')) $('sequenceOrders').value = (sequenceFault.orders || []).join(', ');
-  $('sequenceStatus').textContent = (sequenceFault.enabled ? 'Enabled' : 'Disabled') + ' · Counter: ' + sequenceFault.counter + ' · Next request: ' + sequenceFault.next_request + ' · Block: ' + ((sequenceFault.orders || []).join(', ') || 'None');
   $('profileList').innerHTML = state.length ? state.map(profileCard).join('') : '<div class="empty">No profiles yet. Add your first UAT endpoint to get started.</div>';
   $('profileCount').textContent = state.length;
   $('runningCount').textContent = state.filter(p => runtimeOf(p).running).length;
@@ -256,6 +258,19 @@ $('profileList').addEventListener('click', async (event) => {
       await api('/api/profiles/' + encodeURIComponent(id) + '/processing-codes', {method:'POST', body:JSON.stringify({processing_codes:codes,apply_to:selectedDirection(button.closest('.profile-card'))})});
       await refresh(); toast('Processing Code rules saved');
     }
+    else if (action === 'save-sequence') {
+      const card = button.closest('.profile-card');
+      const raw = card.querySelector('[data-sequence-orders]').value.trim();
+      const orders = raw ? raw.split(',').map(value => value.trim()).filter(Boolean) : [];
+      if (orders.some(value => !/^\\d+$/.test(value) || Number(value) < 1)) {
+        throw new Error('Enter positive request numbers separated by commas, for example: 2, 3, 5');
+      }
+      await api('/api/profiles/' + encodeURIComponent(id) + '/request-sequence-fault', {method:'POST',body:JSON.stringify({enabled:card.querySelector('[data-sequence-enabled]').checked,orders})});
+      await refresh(); toast('Request sequence settings saved for ' + profile.name);
+    } else if (action === 'reset-sequence') {
+      await api('/api/profiles/' + encodeURIComponent(id) + '/request-sequence-fault/reset', {method:'POST',body:'{}'});
+      await refresh(); toast('Request counter reset for ' + profile.name);
+    }
     else if (action === 'preset') {
       const presets = {
         slow: {latency_ms:30000,jitter_ms:0,bandwidth_bytes_per_second:0,pause_client_to_upstream:false,pause_upstream_to_client:false},
@@ -304,27 +319,6 @@ $('profileList').addEventListener('click', async (event) => {
       await api('/api/profiles/' + encodeURIComponent(id) + '/fault',{method:'POST',body:JSON.stringify(payload)});
       await refresh(); toast('Fault settings applied live');
     }
-  } catch(e) { toast(e.message); }
-});
-
-$('saveSequenceBtn').addEventListener('click', async () => {
-  try {
-    const raw = $('sequenceOrders').value.trim();
-    const orders = raw ? raw.split(',').map(value => value.trim()).filter(Boolean) : [];
-    if (orders.some(value => !/^\d+$/.test(value) || Number(value) < 1)) {
-      throw new Error('Enter positive request numbers separated by commas, for example: 2, 3, 5');
-    }
-    const result = await api('/api/request-sequence-fault', {method:'POST', body:JSON.stringify({enabled:$('sequenceEnabled').checked, orders})});
-    sequenceFault = result;
-    await refresh();
-    toast('Request sequence settings saved; counter started from 1');
-  } catch(e) { toast(e.message); }
-});
-$('resetSequenceBtn').addEventListener('click', async () => {
-  try {
-    sequenceFault = await api('/api/request-sequence-fault/reset', {method:'POST', body:'{}'});
-    await refresh();
-    toast('Request counter reset; next request will be #1');
   } catch(e) { toast(e.message); }
 });
 
