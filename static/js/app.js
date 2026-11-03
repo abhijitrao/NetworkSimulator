@@ -391,7 +391,7 @@ $('featureForm').addEventListener('submit', async event => {
       })).filter(rule => rule.processing_code || rule.response_hex.trim());
       const codes = new Set();
       for (const rule of rules) {
-        if (!/^\\d{6}$/.test(rule.processing_code)) throw new Error('Each Processing Code must contain exactly 6 digits');
+        if (!/^\d{6}$/.test(rule.processing_code)) throw new Error('Each Processing Code must contain exactly 6 digits');
         if (codes.has(rule.processing_code)) throw new Error('Duplicate Processing Code: ' + rule.processing_code);
         codes.add(rule.processing_code);
         if (rule.action === 'alter_response' && !rule.response_hex.trim()) throw new Error('Enter replacement response HEX for ' + rule.processing_code);
@@ -400,7 +400,7 @@ $('featureForm').addEventListener('submit', async event => {
       await api('/api/profiles/' + encodeURIComponent(id) + '/processing-code-rules', {method:'POST',body:JSON.stringify({rules,enabled:$('featureEnabled').checked})});
     } else {
       const orders = raw ? raw.split(',').map(value => value.trim()).filter(Boolean) : [];
-      if (orders.some(value => !/^\\d+$/.test(value) || Number(value) < 1)) throw new Error('Enter positive request numbers separated by commas, for example: 2, 3, 5');
+      if (orders.some(value => !/^\d+$/.test(value) || Number(value) < 1)) throw new Error('Enter positive request numbers separated by commas, for example: 2, 3, 5');
       await api('/api/profiles/' + encodeURIComponent(id) + '/request-sequence-fault', {method:'POST',body:JSON.stringify({enabled:$('featureEnabled').checked,orders})});
     }
     $('featureDialog').close(); await refresh(); toast('Settings saved');
