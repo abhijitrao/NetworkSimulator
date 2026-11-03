@@ -121,7 +121,7 @@ class ProcessingCodeProxyTests(unittest.TestCase):
         self.assertTrue(any(e["type"] == "DROPPED" and e["processing_code"] == "960321" for e in self.events))
 
 
-    def test_block_rule_forwards_request_but_suppresses_response(self):
+    def test_block_rule_does_not_forward_request(self):
         self.manager.set_processing_code_rules(self.profile.id, {
             "960321": {"action": "block", "response_hex": ""}
         })
