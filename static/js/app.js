@@ -57,7 +57,7 @@ function profileCard(p) {
   html += '<section class="profile-feature"><div class="feature-heading"><strong>PROCESSING CODE RULES (DE 3)</strong><span class="feature-status ' + (p.transport_label === 'tcp' && processingEnabled ? 'on' : '') + '">' + (p.transport_label === 'tcp' ? (processingEnabled ? 'Enabled' : 'Disabled') : 'Unavailable · TLS') + '</span></div>';
   const ruleMap = p.processing_code_rules || {};
   const ruleSummary = Object.keys(ruleMap).length
-    ? Object.entries(ruleMap).map(([code, rule]) => code + ' · ' + (rule.action === 'alter_response' ? 'Alter Response' : rule.action === 'block' ? 'Block Response' : 'No Action')).join(' | ')
+    ? Object.entries(ruleMap).map(([code, rule]) => code + ' · ' + (rule.action === 'alter_response' ? 'Alter Response' : rule.action === 'block' ? 'Block' : 'No Action')).join(' | ')
     : (p.processing_codes || []).join(', ');
   html += '<div class="feature-detail">' + (p.transport_label === 'tcp' ? esc(ruleSummary || 'No processing codes configured') : 'Encrypted traffic cannot be inspected') + '</div>';
   if (p.transport_label === 'tcp') html += '<div class="feature-actions"><button class="small-btn" data-action="edit-processing" data-id="' + esc(p.id) + '">Edit</button></div>';
@@ -340,7 +340,7 @@ function addProcessingRuleRow(rule = {}) {
   row.innerHTML = '<label>Processing Code (DE 3)<input class="processing-rule-code" inputmode="numeric" maxlength="6" placeholder="000000" value="' + esc(code) + '"></label>' +
     '<label>Action<select class="processing-rule-action">' +
     '<option value="none"' + (action === 'none' ? ' selected' : '') + '>No Action</option>' +
-    '<option value="block"' + (action === 'block' ? ' selected' : '') + '>Block Response</option>' +
+    '<option value="block"' + (action === 'block' ? ' selected' : '') + '>Block</option>' +
     '<option value="alter_response"' + (action === 'alter_response' ? ' selected' : '') + '>Alter Response</option>' +
     '</select></label>' +
     '<label class="processing-response-field">Replacement Response HEX<textarea class="processing-rule-hex" rows="3" spellcheck="false" placeholder="Enter complete ISO8583 response HEX">' + esc(rule.response_hex || '') + '</textarea></label>' +
