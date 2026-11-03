@@ -41,13 +41,26 @@ class ProfileStoreTests(unittest.TestCase):
                 },
             })
 
-    def test_rejects_alter_response_with_mismatched_frame_length(self):
-        with self.assertRaisesRegex(ValueError, "frame length"):
+    def test_accepts_custom_response_hex_without_iso8583_frame_validation(self):
+        profile = ProxyProfile.from_dict({
+            "id": "custom-response",
+            "name": "Custom response",
+            "processing_code_rules": {
+                "000000": {"action": "alter_response", "response_hex": "DE AD BE EF"},
+            },
+        })
+        self.assertEqual(
+            profile.processing_code_rules["000000"]["response_hex"],
+            "DEADBEEF",
+        )
+
+    def test_rejects_non_hex_custom_response(self):
+        with self.assertRaisesRegex(ValueError, "valid, even-length HEX"):
             ProxyProfile.from_dict({
-                "id": "bad-response",
-                "name": "Bad response",
+                "id": "invalid-response",
+                "name": "Invalid response",
                 "processing_code_rules": {
-                    "000000": {"action": "alter_response", "response_hex": "000F600090000108000000000000000000000000"},
+                    "000000": {"action": "alter_response", "response_hex": "ZZ12"},
                 },
             })
 
