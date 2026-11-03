@@ -106,13 +106,6 @@ class ProxyProfile:
             if action == "alter_response":
                 if not response_hex or len(response_hex) % 2 or any(ch not in "0123456789ABCDEF" for ch in response_hex):
                     raise ValueError(f"Processing Code {code}: response must be valid, even-length HEX")
-                response = bytes.fromhex(response_hex)
-                if len(response) < 17:
-                    raise ValueError(f"Processing Code {code}: response must be a complete ISO8583 frame")
-                from .proxy.iso8583 import decode_bcd_length, extract_mti
-                if decode_bcd_length(response[:2]) != len(response) - 2:
-                    raise ValueError(f"Processing Code {code}: response frame length does not match HEX payload")
-                extract_mti(response)
             normalized_rules[code] = {"action": action, "response_hex": response_hex if action == "alter_response" else ""}
         self.processing_code_rules = normalized_rules
         if normalized_rules:
