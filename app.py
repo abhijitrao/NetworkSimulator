@@ -181,6 +181,10 @@ def create_app(config_path: str | Path = CONFIG_PATH, manager: ProxyManager | No
             if profile.transport_label != "tcp" and codes:
                 return jsonify(error="Processing Code rules are supported only for Plain TCP profiles"), 400
             profile.processing_codes = codes
+            enabled = payload.get("enabled", profile.processing_rules_enabled)
+            if not isinstance(enabled, bool):
+                return jsonify(error="enabled must be a boolean"), 400
+            profile.processing_rules_enabled = enabled
             if apply_to is not None:
                 profile.fault_profile.apply_to = apply_to
                 profile.fault_profile.validate()
@@ -195,7 +199,7 @@ def create_app(config_path: str | Path = CONFIG_PATH, manager: ProxyManager | No
         except ValueError:
             # A stopped profile will use the saved values when it starts.
             pass
-        return jsonify(ok=True, processing_codes=codes, apply_to=apply_to)
+        return jsonify(ok=True, processing_codes=codes, enabled=profile.processing_rules_enabled, apply_to=apply_to)
 
     @app.post("/api/profiles/<profile_id>/request-sequence-fault")
     def set_request_sequence_fault(profile_id: str):
