@@ -112,3 +112,9 @@ body.event-fullscreen-open{overflow:hidden}
 .sequence-summary span{white-space:nowrap}
 .profile-feature-pair+.fault-panel{border-top:0}
 @media(max-width:560px){.sequence-summary{align-items:flex-start;flex-direction:column;gap:5px}.sequence-summary span{white-space:normal}}
+
+/* Fault injection presets: consistent spacing and clear active-state feedback. */
+.apply-row{gap:8px;flex-wrap:wrap}
+.apply-row .small-btn.active{background:#245b49;border-color:#43b88c;color:#eafff6;box-shadow:0 0 0 1px #43b88c inset}
+.apply-row .small-btn.go.active{background:#26775c;border-color:#55d5a5;color:#fff}
+.apply-row .small-btn.active:hover{filter:brightness(1.12)}
