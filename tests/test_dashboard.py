@@ -108,6 +108,12 @@ class DashboardTests(unittest.TestCase):
         self.assertNotIn(b"\\n", raw)
         self.assertNotIn(b"\\t", raw)
         self.assertEqual(len(raw.splitlines()), 9)
+        self.assertNotIn("CONNECTION ID", content)
+        self.assertNotIn("c1", content)
+        self.assertNotIn("c2", content)
+        self.assertIn("TIMESTAMP              EVENT", content)
+        self.assertIn("MTI", content)
+        self.assertNotIn("MTI / TRANSPORT", content)
 
     def test_reject_remote_client(self):
         response = self.client.get("/api/state", environ_overrides={"REMOTE_ADDR": "192.0.2.1"})
