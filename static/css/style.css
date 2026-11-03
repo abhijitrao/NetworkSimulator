@@ -123,3 +123,17 @@ body.event-fullscreen-open{overflow:hidden}
 .apply-row .small-btn.custom-apply{background:#29466d;border-color:#426895;color:#e8f1ff}
 .apply-row .small-btn.custom-apply:hover{background:#345783}
 .apply-row .small-btn.custom-apply.active{background:#245b49;border-color:#43b88c;color:#eafff6;box-shadow:0 0 0 1px #43b88c inset}
+
+/* Per-Processing-Code action editor (Phase 2). */
+#featureDialog{width:min(820px,calc(100% - 28px))}
+#featureDialog [hidden]{display:none!important}
+.rule-editor-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:8px 0 12px;color:#d9e5f7;font-size:12px}
+#processingRuleRows{display:grid;gap:10px;max-height:55vh;overflow:auto;padding-right:3px}
+.processing-rule-row{display:grid;grid-template-columns:minmax(130px,.8fr) minmax(150px,.9fr) minmax(220px,1.5fr) auto;gap:10px;align-items:start;padding:12px;background:#0d1728;border:1px solid #2b3a55;border-radius:9px}
+.processing-rule-row label{display:grid;gap:6px;color:#aebbd0;font-size:10px}
+.processing-rule-row input,.processing-rule-row select,.processing-rule-row textarea{width:100%;min-width:0;background:#0a1220;color:#eef4ff;border:1px solid #33435e;border-radius:7px;padding:9px;font:11px "Consolas",monospace}
+.processing-rule-row select{font-family:"Segoe UI",Arial,sans-serif}
+.processing-rule-row textarea{resize:vertical;min-height:62px;display:none}
+.processing-rule-row.alter-response textarea{display:block}
+.processing-rule-row .remove-processing-rule{margin-top:20px;white-space:nowrap}
+@media(max-width:700px){.processing-rule-row{grid-template-columns:1fr 1fr}.processing-rule-row .processing-response-field{grid-column:1/-1}.processing-rule-row .remove-processing-rule{margin-top:0;justify-self:end}}
