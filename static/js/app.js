@@ -174,6 +174,22 @@ async function refreshEvents() {
   }).join('') : '<div class="empty">No matching events yet.</div>';
 }
 $('eventFilter').addEventListener('change', () => refreshEvents().catch(() => {}));
+$('exportEventsBtn').addEventListener('click', () => { window.location.href = '/api/events/export'; });
+function setEventsFullscreen(expanded) {
+  const panel = document.querySelector('.event-panel');
+  panel.classList.toggle('event-panel-fullscreen', expanded);
+  document.body.classList.toggle('event-fullscreen-open', expanded);
+  $('expandEventsBtn').textContent = expanded ? 'Exit full screen' : 'Full screen';
+  $('expandEventsBtn').setAttribute('aria-pressed', String(expanded));
+  $('expandEventsBtn').setAttribute('aria-label', expanded ? 'Exit full screen traffic log' : 'Expand traffic log to full screen');
+}
+$('expandEventsBtn').addEventListener('click', () => {
+  const expanded = !$('expandEventsBtn').getAttribute('aria-pressed') || $('expandEventsBtn').getAttribute('aria-pressed') !== 'true';
+  setEventsFullscreen(expanded);
+});
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && document.querySelector('.event-panel-fullscreen')) setEventsFullscreen(false);
+});
 $('clearEventsBtn').addEventListener('click', async () => { await api('/api/events/clear',{method:'POST',body:'{}'}); await refreshEvents(); });
 
 async function refresh() {
