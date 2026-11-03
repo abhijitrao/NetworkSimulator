@@ -195,7 +195,7 @@ def create_app(config_path: str | Path = CONFIG_PATH, manager: ProxyManager | No
             except ValueError:
                 pass
         try:
-            proxy_manager.set_processing_codes(profile_id, codes)
+            proxy_manager.set_processing_codes(profile_id, codes, profile.processing_rules_enabled)
         except ValueError:
             # A stopped profile will use the saved values when it starts.
             pass
