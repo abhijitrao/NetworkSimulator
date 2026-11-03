@@ -62,6 +62,12 @@ def create_app(config_path: str | Path = CONFIG_PATH, manager: ProxyManager | No
                 return item
         raise LookupError("Profile not found")
 
+    # Restore each profile's sequence settings; counters always restart at zero.
+    for saved_profile in profiles():
+        proxy_manager.configure_request_sequence_fault(
+            saved_profile.id, saved_profile.request_sequence_enabled, saved_profile.request_sequence_orders
+        )
+
     @app.before_request
     def restrict_management_to_localhost():
         if request.remote_addr not in {"127.0.0.1", "::1"}:
