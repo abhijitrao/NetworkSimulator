@@ -55,7 +55,11 @@ function profileCard(p) {
   const processingEnabled = p.processing_rules_enabled !== false;
   html += '<div class="profile-feature-pair">';
   html += '<section class="profile-feature"><div class="feature-heading"><strong>PROCESSING CODE RULES (DE 3)</strong><span class="feature-status ' + (p.transport_label === 'tcp' && processingEnabled ? 'on' : '') + '">' + (p.transport_label === 'tcp' ? (processingEnabled ? 'Enabled' : 'Disabled') : 'Unavailable · TLS') + '</span></div>';
-  html += '<div class="feature-detail">' + (p.transport_label === 'tcp' ? esc((p.processing_codes || []).join(', ') || 'No processing codes configured') : 'Encrypted traffic cannot be inspected') + '</div>';
+  const ruleMap = p.processing_code_rules || {};
+  const ruleSummary = Object.keys(ruleMap).length
+    ? Object.entries(ruleMap).map(([code, rule]) => code + ' · ' + (rule.action === 'alter_response' ? 'Alter Response' : rule.action === 'block' ? 'Block Response' : 'No Action')).join(' | ')
+    : (p.processing_codes || []).join(', ');
+  html += '<div class="feature-detail">' + (p.transport_label === 'tcp' ? esc(ruleSummary || 'No processing codes configured') : 'Encrypted traffic cannot be inspected') + '</div>';
   if (p.transport_label === 'tcp') html += '<div class="feature-actions"><button class="small-btn" data-action="edit-processing" data-id="' + esc(p.id) + '">Edit</button></div>';
   html += '</section>';
   html += '<section class="profile-feature sequence-profile-panel"><div class="feature-heading"><strong>REQUEST SEQUENCE BLOCKING</strong><span class="feature-status ' + (sequence.enabled ? 'on' : '') + '">' + (sequence.enabled ? 'Enabled' : 'Disabled') + '</span></div>';
@@ -245,6 +249,7 @@ function formPayload(id) {
     request_sequence_orders:existing?.request_sequence_orders || [],
     processing_rules_enabled:existing?.processing_rules_enabled ?? true,
     processing_codes:existing?.processing_codes || [],
+    processing_code_rules:existing?.processing_code_rules || {},
     upstream_host:$('upstreamHost').value.trim(), upstream_port:Number($('upstreamPort').value),
     listen_port:Number($('listenPort').value), bind_host:$('bindHost').value,
     connect_timeout_ms:Number($('connectTimeout').value), notes:$('notes').value.trim(), enabled:$('enabled').checked,
@@ -327,28 +332,75 @@ $('profileList').addEventListener('click', async (event) => {
   } catch(e) { toast(e.message); }
 });
 
+function addProcessingRuleRow(rule = {}) {
+  const row = document.createElement('div');
+  row.className = 'processing-rule-row';
+  const code = rule.processing_code || rule.code || '';
+  const action = rule.action || 'none';
+  row.innerHTML = '<label>Processing Code (DE 3)<input class="processing-rule-code" inputmode="numeric" maxlength="6" placeholder="000000" value="' + esc(code) + '"></label>' +
+    '<label>Action<select class="processing-rule-action">' +
+    '<option value="none"' + (action === 'none' ? ' selected' : '') + '>No Action</option>' +
+    '<option value="block"' + (action === 'block' ? ' selected' : '') + '>Block Response</option>' +
+    '<option value="alter_response"' + (action === 'alter_response' ? ' selected' : '') + '>Alter Response</option>' +
+    '</select></label>' +
+    '<label class="processing-response-field">Replacement Response HEX<textarea class="processing-rule-hex" rows="3" spellcheck="false" placeholder="Enter complete ISO8583 response HEX">' + esc(rule.response_hex || '') + '</textarea></label>' +
+    '<button type="button" class="small-btn danger remove-processing-rule">Remove</button>';
+  $('processingRuleRows').appendChild(row);
+  const actionSelect = row.querySelector('.processing-rule-action');
+  const updateVisibility = () => row.classList.toggle('alter-response', actionSelect.value === 'alter_response');
+  actionSelect.addEventListener('change', updateVisibility);
+  row.querySelector('.remove-processing-rule').addEventListener('click', () => row.remove());
+  updateVisibility();
+}
+
 function openFeatureDialog(type, profile) {
   const sequence = profile.request_sequence_fault || {enabled:profile.request_sequence_enabled,orders:profile.request_sequence_orders || []};
-  $('featureDialogTitle').textContent = type === 'processing' ? 'Processing Code Rules (DE 3)' : 'Request Sequence Blocking';
+  const processing = type === 'processing';
+  $('featureDialogTitle').textContent = processing ? 'Processing Code Rules (DE 3)' : 'Request Sequence Blocking';
   $('featureDialogType').value = type;
   $('featureDialogProfileId').value = profile.id;
-  $('featureEnabled').checked = type === 'processing' ? profile.processing_rules_enabled !== false : !!sequence.enabled;
-  $('featureValuesLabel').textContent = type === 'processing' ? 'Processing Codes (6 digits, comma-separated)' : 'Block request numbers (comma-separated)';
-  $('featureValues').value = type === 'processing' ? (profile.processing_codes || []).join(', ') : (sequence.orders || []).join(', ');
-  $('featureValues').placeholder = type === 'processing' ? '000000, 003000' : '2, 3, 5';
+  $('featureEnabled').checked = processing ? profile.processing_rules_enabled !== false : !!sequence.enabled;
+  $('processingRuleEditor').hidden = !processing;
+  $('featureValuesLabel').hidden = processing;
+  $('featureValues').hidden = processing;
+  if (processing) {
+    $('processingRuleRows').innerHTML = '';
+    const rules = profile.processing_code_rules || {};
+    const entries = Object.keys(rules).length
+      ? Object.entries(rules).map(([processing_code, rule]) => ({processing_code, ...rule}))
+      : (profile.processing_codes || []).map(processing_code => ({processing_code, action:'block'}));
+    entries.forEach(addProcessingRuleRow);
+  } else {
+    $('featureValuesLabel').textContent = 'Block request numbers (comma-separated)';
+    $('featureValues').value = (sequence.orders || []).join(', ');
+    $('featureValues').placeholder = '2, 3, 5';
+  }
   $('featureDialog').showModal();
 }
+$('addProcessingRule').addEventListener('click', () => addProcessingRuleRow());
 $('featureForm').addEventListener('submit', async event => {
   event.preventDefault();
   const id = $('featureDialogProfileId').value, type = $('featureDialogType').value, raw = $('featureValues').value.trim();
   try {
     if (type === 'processing') {
-      const codes = raw ? raw.split(/[ ,;\n]+/).map(value => value.trim()).filter(Boolean) : [];
-      if (codes.some(value => !/^\d{6}$/.test(value))) throw new Error('Each Processing Code must contain exactly 6 digits');
-      await api('/api/profiles/' + encodeURIComponent(id) + '/processing-codes', {method:'POST',body:JSON.stringify({processing_codes:codes,enabled:$('featureEnabled').checked})});
+      const rows = [...$('processingRuleRows').querySelectorAll('.processing-rule-row')];
+      const rules = rows.map(row => ({
+        processing_code: row.querySelector('.processing-rule-code').value.trim(),
+        action: row.querySelector('.processing-rule-action').value,
+        response_hex: row.querySelector('.processing-rule-hex').value
+      })).filter(rule => rule.processing_code || rule.response_hex.trim());
+      const codes = new Set();
+      for (const rule of rules) {
+        if (!/^\\d{6}$/.test(rule.processing_code)) throw new Error('Each Processing Code must contain exactly 6 digits');
+        if (codes.has(rule.processing_code)) throw new Error('Duplicate Processing Code: ' + rule.processing_code);
+        codes.add(rule.processing_code);
+        if (rule.action === 'alter_response' && !rule.response_hex.trim()) throw new Error('Enter replacement response HEX for ' + rule.processing_code);
+        if (rule.action !== 'alter_response') rule.response_hex = '';
+      }
+      await api('/api/profiles/' + encodeURIComponent(id) + '/processing-code-rules', {method:'POST',body:JSON.stringify({rules,enabled:$('featureEnabled').checked})});
     } else {
       const orders = raw ? raw.split(',').map(value => value.trim()).filter(Boolean) : [];
-      if (orders.some(value => !/^\d+$/.test(value) || Number(value) < 1)) throw new Error('Enter positive request numbers separated by commas, for example: 2, 3, 5');
+      if (orders.some(value => !/^\\d+$/.test(value) || Number(value) < 1)) throw new Error('Enter positive request numbers separated by commas, for example: 2, 3, 5');
       await api('/api/profiles/' + encodeURIComponent(id) + '/request-sequence-fault', {method:'POST',body:JSON.stringify({enabled:$('featureEnabled').checked,orders})});
     }
     $('featureDialog').close(); await refresh(); toast('Settings saved');
