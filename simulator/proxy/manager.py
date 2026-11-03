@@ -105,7 +105,7 @@ class ProxyManager:
             raise ValueError("Proxy profile is not running")
         runtime.set_fault_settings(settings)
 
-    def set_processing_codes(self, profile_id: str, codes: list[str]) -> None:
+    def set_processing_codes(self, profile_id: str, codes: list[str], enabled: bool = True) -> None:
         with self._lock:
             runtime = self._runtimes.get(profile_id)
         if not runtime or not runtime.running:
@@ -113,6 +113,7 @@ class ProxyManager:
         if runtime.profile.transport_label != 'tcp':
             raise ValueError('Processing Code rules are supported only for Plain TCP profiles')
         runtime.profile.processing_codes = list(codes)
+        runtime.profile.processing_rules_enabled = bool(enabled)
 
     def abort_connections(self, profile_id: str) -> int:
         with self._lock:
