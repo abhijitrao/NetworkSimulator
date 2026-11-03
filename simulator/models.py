@@ -115,6 +115,8 @@ class ProxyProfile:
                 extract_mti(response)
             normalized_rules[code] = {"action": action, "response_hex": response_hex if action == "alter_response" else ""}
         self.processing_code_rules = normalized_rules
+        if normalized_rules:
+            self.processing_codes = list(normalized_rules)
         self.fault_profile.validate()
 
     def to_dict(self) -> dict[str, Any]:
