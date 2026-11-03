@@ -87,7 +87,7 @@ class ProxyProfile:
             raise ValueError("transport_label must be 'tcp' or 'tls_passthrough'")
         if not 100 <= self.connect_timeout_ms <= 300000:
             raise ValueError("connect_timeout_ms must be between 100 and 300000")
-        if self.transport_label == "tls_passthrough" and self.processing_codes:
+        if self.transport_label == "tls_passthrough" and (self.processing_codes or self.processing_code_rules):
             raise ValueError("Processing Code rules are supported only for Plain TCP profiles")
         if any(order < 1 for order in self.request_sequence_orders):
             raise ValueError("Request sequence numbers must be greater than zero")
