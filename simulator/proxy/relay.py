@@ -294,7 +294,7 @@ class ProxyRuntime:
                                         outgoing_chunks.append(frame)
                         # With no suppression rules, inspect complete request frames
                         # for metadata but forward every original TCP chunk immediately.
-                        elif not self.profile.processing_rules_enabled or not self.profile.processing_codes:
+                        elif not self.profile.processing_rules_enabled or not self.profile.processing_codes or not self.profile.processing_code_rules:
                             outgoing_chunks = [chunk]
                             for frame in frames:
                                 try:
