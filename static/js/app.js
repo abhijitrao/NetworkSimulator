@@ -69,12 +69,12 @@ function profileCard(p) {
   html += '</div><div class="fault-checks">';
   const pauseEnabled = fault.apply_to === 'response' ? fault.pause_upstream_to_client : fault.apply_to === 'both' ? (fault.pause_client_to_upstream || fault.pause_upstream_to_client) : fault.pause_client_to_upstream;
   html += faultCheck('Pause traffic', 'pause_enabled', pauseEnabled);
-  html += '</div><div class="apply-row"><button class="small-btn" data-action="normal" data-id="' + esc(p.id) + '">Normal</button>';
+  html += '</div><div class="apply-row"><button class="small-btn ' + (activeFault === 'normal' ? 'active' : '') + '" data-action="normal" data-id="' + esc(p.id) + '">Normal</button>';
   html += '<button class="small-btn ' + (activeFault === 'slow' ? 'active' : '') + '" data-action="preset" data-preset="slow" data-id="' + esc(p.id) + '"' + (running ? '' : ' disabled') + '>Slow 30s</button>';
   html += '<button class="small-btn ' + (activeFault === 'very-slow' ? 'active' : '') + '" data-action="preset" data-preset="very-slow" data-id="' + esc(p.id) + '"' + (running ? '' : ' disabled') + '>Very slow 55s</button>';
   html += '<button class="small-btn ' + (activeFault === 'unstable' ? 'active' : '') + '" data-action="preset" data-preset="unstable" data-id="' + esc(p.id) + '"' + (running ? '' : ' disabled') + '>Unstable</button>';
   html += '<button class="small-btn ' + (activeFault === 'no-response' ? 'active' : '') + '" data-action="preset" data-preset="no-response" data-id="' + esc(p.id) + '"' + (running ? '' : ' disabled') + '>No response</button>';
-  html += '<button class="small-btn go ' + (activeFault === 'custom' ? 'active' : '') + '" data-action="apply-fault" data-id="' + esc(p.id) + '"' + (running ? '' : ' disabled title="Start proxy first"') + '>Apply custom</button></div></div>';
+  html += '<button class="small-btn custom-apply ' + (activeFault === 'custom' ? 'active' : '') + '" data-action="apply-fault" data-id="' + esc(p.id) + '"' + (running ? '' : ' disabled title="Start proxy first"') + '>Apply custom</button></div></div>';
   if (rt.connections && rt.connections.length) {
     html += '<div class="fault-panel"><div class="fault-title">ACTIVE CONNECTIONS</div>';
     rt.connections.forEach(c => { html += '<div class="endpoint">' + esc(c.client) + ' · POS → Server ' + c.bytes_from_client + ' B · Server → POS ' + c.bytes_from_upstream + ' B</div>'; });
