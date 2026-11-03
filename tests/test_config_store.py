@@ -47,7 +47,7 @@ class ProfileStoreTests(unittest.TestCase):
                 "id": "bad-response",
                 "name": "Bad response",
                 "processing_code_rules": {
-                    "000000": {"action": "alter_response", "response_hex": "000F60009000010800"},
+                    "000000": {"action": "alter_response", "response_hex": "000F600090000108000000000000000000000000"},
                 },
             })
 
