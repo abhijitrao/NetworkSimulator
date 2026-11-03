@@ -311,7 +311,7 @@ $('saveSequenceBtn').addEventListener('click', async () => {
   try {
     const raw = $('sequenceOrders').value.trim();
     const orders = raw ? raw.split(',').map(value => value.trim()).filter(Boolean) : [];
-    if (orders.some(value => !/^\\d+$/.test(value) || Number(value) < 1)) {
+    if (orders.some(value => !/^\d+$/.test(value) || Number(value) < 1)) {
       throw new Error('Enter positive request numbers separated by commas, for example: 2, 3, 5');
     }
     const result = await api('/api/request-sequence-fault', {method:'POST', body:JSON.stringify({enabled:$('sequenceEnabled').checked, orders})});
