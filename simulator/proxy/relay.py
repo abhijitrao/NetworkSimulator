@@ -5,6 +5,7 @@ TLS is forwarded as opaque bytes. The proxy never terminates TLS or sees plainte
 from __future__ import annotations
 
 import logging
+from collections import deque
 import random
 import socket
 import socketserver
@@ -143,6 +144,8 @@ class ProxyRuntime:
         self._notify()
         suppress_responses = threading.Event()
         suppressed_code = {'value': '', 'reason': 'Processing Code rule'}
+        response_rule_queue = deque()
+        response_rule_lock = threading.Lock()
         sequence_number = None
         try:
             sequence = self.on_request_accepted() if self.on_request_accepted else None
@@ -267,8 +270,8 @@ class ProxyRuntime:
                             self._emit_event('RESPONSE', info, suppressed_code['value'], 'Server response received')
                     else:
                         if direction == 'upstream':
-                            # Response metadata is observational only; never apply
-                            # request Processing Code suppression to server frames.
+                            # Keep response frames aligned with requests on this TCP stream.
+                            # This App opens one transaction connection per request.
                             for frame in frames:
                                 try:
                                     code = extract_processing_code(frame) or ''
@@ -277,6 +280,18 @@ class ProxyRuntime:
                                     self._emit_event('PARSE_ERROR', info, detail=str(exc))
                                     code, mti = '', ''
                                 self._emit_event('RESPONSE', info, code, 'Server response received', mti)
+                            if self.profile.processing_rules_enabled and self.profile.processing_code_rules:
+                                outgoing_chunks = []
+                                for frame in frames:
+                                    with response_rule_lock:
+                                        action_rule = response_rule_queue.popleft() if response_rule_queue else None
+                                    if action_rule and action_rule['action'] == 'alter_response':
+                                        replacement = bytes.fromhex(action_rule['response_hex'])
+                                        outgoing_chunks.append(replacement)
+                                        self._emit_event('RESPONSE_REPLACED', info, action_rule['code'],
+                                                         f'Original server response replaced with configured HEX ({len(replacement)} bytes)', mti)
+                                    else:
+                                        outgoing_chunks.append(frame)
                         # With no suppression rules, inspect complete request frames
                         # for metadata but forward every original TCP chunk immediately.
                         elif not self.profile.processing_rules_enabled or not self.profile.processing_codes:
@@ -297,17 +312,25 @@ class ProxyRuntime:
                                 except Iso8583FrameError as exc:
                                     self._emit_event('PARSE_ERROR', info, detail=str(exc))
                                     outgoing_chunks.append(frame)
+                                    with response_rule_lock:
+                                        response_rule_queue.append(None)
                                     continue
                                 self._emit_event('REQUEST', info, code or '', 'ISO8583 request', extract_mti(frame))
-                                if code and code in self.profile.processing_codes:
-                                    rule_direction = self._fault_snapshot().apply_to
-                                    if rule_direction in {'response', 'both'}:
+                                rule = self.profile.processing_code_rules.get(code or '') if self.profile.processing_rules_enabled else None
+                                if rule:
+                                    action = rule.get('action', 'block')
+                                    with response_rule_lock:
+                                        response_rule_queue.append({"action": action, "response_hex": rule.get("response_hex", ""), "code": code})
+                                    suppressed_code['value'] = code
+                                    if action == 'block':
                                         suppress_responses.set()
-                                        suppressed_code['value'] = code
-                                    if rule_direction in {'request', 'both'}:
-                                        self._emit_event('DROPPED', info, code, 'Request suppressed by Processing Code rule')
-                                        continue
-                                    self._emit_event('MATCHED', info, code, 'Request forwarded; server response suppression armed')
+                                        suppressed_code['reason'] = 'Processing Code Block rule'
+                                        self._emit_event('MATCHED', info, code, 'Request forwarded; server response will be blocked')
+                                    else:
+                                        self._emit_event('MATCHED', info, code, 'Request forwarded; server response will be replaced')
+                                else:
+                                    with response_rule_lock:
+                                        response_rule_queue.append(None)
                                 outgoing_chunks.append(frame)
                         # Partial frames remain buffered until the next TCP chunk.
 
