@@ -89,14 +89,18 @@ body.event-fullscreen-open{overflow:hidden}
 .sequence-profile-panel .sequence-orders-label input{width:100%;background:#0c1424;color:#eef4ff;border:1px solid #33435e;border-radius:8px;padding:9px;font:12px Consolas,monospace}
 .sequence-profile-panel .sequence-status{margin:0;color:#9de8ca;font-size:10px;overflow-wrap:anywhere}
 
-/* Compact profile feature summaries and dialogs */
-.profile-feature{border-top:1px solid var(--line);margin-top:12px;padding-top:11px}
-.feature-heading{display:flex;align-items:center;justify-content:space-between;gap:10px}
-.feature-heading strong{font-size:11px;font-weight:650;color:#d9e5f7}
+/* Two-column profile feature layout with a subtle center divider. */
+.profile-feature-pair{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);margin-top:14px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.profile-feature-pair .profile-feature{min-width:0;margin:0;padding:13px 12px 13px 0;border:0}
+.profile-feature-pair .profile-feature+.profile-feature{padding:13px 0 13px 14px;border-left:1px solid #34425d}
+.feature-heading{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.feature-heading strong{font-size:11px;font-weight:650;color:#d9e5f7;line-height:1.4}
 .feature-status{font-size:10px;color:#f3d18a;white-space:nowrap}
 .feature-status.on{color:#72e0b6}
 .feature-detail{font-size:10px;color:#aebed8;margin-top:7px;line-height:1.45;overflow-wrap:anywhere}
-.feature-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:9px}
+.next-counter-detail{color:#9de8ca}
+.feature-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:9px}
+@media(max-width:560px){.profile-feature-pair{grid-template-columns:1fr}.profile-feature-pair .profile-feature{padding:12px 0}.profile-feature-pair .profile-feature+.profile-feature{border-left:0;border-top:1px solid #34425d}}
 .feature-enable{margin:0 0 14px}
 .feature-values-label{display:block;color:#aebbd0;font-size:11px;margin-bottom:6px}
 #featureValues{display:block;width:100%;resize:vertical;min-height:76px;background:#0c1424;color:#eef4ff;border:1px solid #33435e;border-radius:8px;padding:10px;font:12px Consolas,monospace}
