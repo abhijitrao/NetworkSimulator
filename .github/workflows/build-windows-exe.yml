@@ -3,7 +3,7 @@ name: Build portable Windows EXE
 on:
   workflow_dispatch:
   pull_request:
-    branches: [develop]
+    branches: [main, develop]
   push:
     branches: [main, develop]
     paths:
