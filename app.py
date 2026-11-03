@@ -47,6 +47,14 @@ def create_app(config_path: str | Path = CONFIG_PATH, manager: ProxyManager | No
     proxy_manager = manager or ProxyManager(on_event=record_event)
     proxy_manager.on_event = record_event
     state_lock = threading.RLock()
+    sequence_config_path = Path(config_path).with_suffix(Path(config_path).suffix + ".sequence.json")
+    if sequence_config_path.exists():
+        try:
+            saved_sequence = json.loads(sequence_config_path.read_text(encoding="utf-8"))
+            proxy_manager.configure_request_sequence_fault(bool(saved_sequence.get("enabled", False)), saved_sequence.get("orders", []))
+            proxy_manager.reset_request_sequence_fault()
+        except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+            LOG.warning("Could not load request sequence fault settings: %s", exc)
 
     if not Path(config_path).exists() and EXAMPLE_PATH.exists():
         examples = [ProxyProfile.from_dict(item) for item in json.loads(EXAMPLE_PATH.read_text(encoding="utf-8"))]
@@ -88,7 +96,7 @@ def create_app(config_path: str | Path = CONFIG_PATH, manager: ProxyManager | No
         return jsonify(profiles=[{
             **profile.to_dict(),
             "runtime": status_by_id.get(profile.id, {"running": False, "active_connections": 0, "connections": []}),
-        } for profile in items])
+        } for profile in items], request_sequence_fault=proxy_manager.request_sequence_status())
 
     @app.post("/api/profiles")
     def create_profile():
@@ -190,6 +198,33 @@ def create_app(config_path: str | Path = CONFIG_PATH, manager: ProxyManager | No
             # A stopped profile will use the saved values when it starts.
             pass
         return jsonify(ok=True, processing_codes=codes, apply_to=apply_to)
+
+    @app.post("/api/request-sequence-fault")
+    def set_request_sequence_fault():
+        payload = request.get_json(force=True) or {}
+        enabled = payload.get("enabled", False)
+        raw_orders = payload.get("orders", [])
+        if not isinstance(enabled, bool):
+            return jsonify(error="enabled must be a boolean"), 400
+        if isinstance(raw_orders, str):
+            raw_orders = [part.strip() for part in raw_orders.split(",") if part.strip()]
+        if not isinstance(raw_orders, list):
+            return jsonify(error="orders must be a comma-separated string or array"), 400
+        try:
+            orders = sorted(set(int(value) for value in raw_orders))
+            if any(value < 1 for value in orders):
+                raise ValueError("Request order numbers must be greater than zero")
+            status = proxy_manager.configure_request_sequence_fault(enabled, orders)
+        except (TypeError, ValueError) as exc:
+            return jsonify(error=str(exc)), 400
+        sequence_config_path.parent.mkdir(parents=True, exist_ok=True)
+        sequence_config_path.write_text(json.dumps({"enabled": status["enabled"], "orders": status["orders"]}, indent=2), encoding="utf-8")
+        return jsonify(ok=True, **status)
+
+    @app.post("/api/request-sequence-fault/reset")
+    def reset_request_sequence_fault():
+        status = proxy_manager.reset_request_sequence_fault()
+        return jsonify(ok=True, **status)
 
     @app.get("/api/diagnostics/raw-hex")
     def get_raw_hex_setting():
