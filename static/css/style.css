@@ -80,3 +80,5 @@ body.event-fullscreen-open{overflow:hidden}
 @media(max-width:1100px){
   .event-panel-fullscreen>.section-head{grid-template-columns:1fr}
 }
+
+.sequence-fault-panel{display:grid;grid-template-columns:minmax(0,1fr) minmax(320px,1fr);gap:24px;margin:0 0 22px;padding:22px;background:linear-gradient(145deg,#17243a,#111a2c);border:1px solid #3b4e6d;border-radius:14px}.sequence-fault-panel h2{font-size:20px;margin:0}.sequence-fault-panel .muted{font-size:12px;line-height:1.6}.sequence-controls{display:grid;gap:12px}.sequence-orders-label{display:grid;gap:6px;color:#aebbd0;font-size:11px}.sequence-orders-label input{width:100%;background:#0c1424;color:#eef4ff;border:1px solid #33435e;border-radius:8px;padding:11px;font:13px Consolas,monospace}.sequence-actions{display:flex;gap:9px;flex-wrap:wrap}.sequence-status{margin:0;color:#9de8ca;font-size:11px}@media(max-width:800px){.sequence-fault-panel{grid-template-columns:1fr}}
