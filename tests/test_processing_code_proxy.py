@@ -121,6 +121,42 @@ class ProcessingCodeProxyTests(unittest.TestCase):
         self.assertTrue(any(e["type"] == "DROPPED" and e["processing_code"] == "960321" for e in self.events))
 
 
+    def test_block_rule_forwards_request_but_suppresses_response(self):
+        self.manager.set_processing_code_rules(self.profile.id, {
+            "960321": {"action": "block", "response_hex": ""}
+        })
+        with socket.create_connection(("127.0.0.1", self.profile.listen_port), timeout=2) as client:
+            client.settimeout(0.4)
+            client.sendall(SAMPLE)
+            self.assertTrue(RecordingEchoHandler.received_event.wait(1))
+            self.assertEqual(RecordingEchoHandler.received[0], SAMPLE)
+            with self.assertRaises(socket.timeout):
+                client.recv(4096)
+        self.assertTrue(any(e["type"] == "DROPPED" and e["processing_code"] == "960321" for e in self.events))
+
+    def test_alter_response_rule_replaces_server_frame(self):
+        replacement = bytearray(SAMPLE)
+        replacement[7:9] = bytes.fromhex("0810")  # 0810 response MTI
+        replacement_bytes = bytes(replacement)
+        self.manager.set_processing_code_rules(self.profile.id, {
+            "960321": {"action": "alter_response", "response_hex": replacement_bytes.hex().upper()}
+        })
+        with socket.create_connection(("127.0.0.1", self.profile.listen_port), timeout=2) as client:
+            client.settimeout(2)
+            client.sendall(SAMPLE)
+            self.assertEqual(client.recv(len(replacement_bytes)), replacement_bytes)
+        self.assertTrue(any(e["type"] == "RESPONSE_REPLACED" and e["processing_code"] == "960321" for e in self.events))
+
+    def test_no_action_rule_forwards_original_request_and_response(self):
+        self.manager.set_processing_code_rules(self.profile.id, {
+            "960321": {"action": "none", "response_hex": ""}
+        })
+        with socket.create_connection(("127.0.0.1", self.profile.listen_port), timeout=2) as client:
+            client.settimeout(2)
+            client.sendall(SAMPLE)
+            self.assertEqual(client.recv(len(SAMPLE)), SAMPLE)
+        self.assertTrue(any(e["type"] == "MATCHED" and "No Action" in e["detail"] for e in self.events))
+
     def test_profile_request_sequence_blocks_selected_connection_responses(self):
         self.manager.set_processing_codes(self.profile.id, [])
         self.manager.configure_request_sequence_fault(self.profile.id, True, [2, 3, 5])
