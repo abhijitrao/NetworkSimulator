@@ -118,3 +118,8 @@ body.event-fullscreen-open{overflow:hidden}
 .apply-row .small-btn.active{background:#245b49;border-color:#43b88c;color:#eafff6;box-shadow:0 0 0 1px #43b88c inset}
 .apply-row .small-btn.go.active{background:#26775c;border-color:#55d5a5;color:#fff}
 .apply-row .small-btn.active:hover{filter:brightness(1.12)}
+
+/* Apply Custom uses a neutral blue until selected; active options use green. */
+.apply-row .small-btn.custom-apply{background:#29466d;border-color:#426895;color:#e8f1ff}
+.apply-row .small-btn.custom-apply:hover{background:#345783}
+.apply-row .small-btn.custom-apply.active{background:#245b49;border-color:#43b88c;color:#eafff6;box-shadow:0 0 0 1px #43b88c inset}
