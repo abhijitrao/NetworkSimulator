@@ -134,12 +134,16 @@ class ProxyRuntime:
         connection_id = uuid.uuid4().hex[:12]
         info = ConnectionInfo(connection_id, f"{address[0]}:{address[1]}", time.time())
         upstream: socket.socket | None = None
+        connected = False
+        is_tls = self.profile.transport_label == 'tls_passthrough'
+        connected = False
         with self._lock:
             self._connections[connection_id] = info
             self._sockets[connection_id] = {client}
         self._notify()
         suppress_responses = threading.Event()
         suppressed_code = {'value': ''}
+        is_tls = self.profile.transport_label == 'tls_passthrough'
         try:
             if self._stopping.is_set():
                 return
@@ -153,7 +157,15 @@ class ProxyRuntime:
                 self._sockets[connection_id].add(upstream)
             if self._stopping.is_set():
                 return
+            connected = True
+            connected = True
             LOG.info("[%s] Connected client %s", connection_id, info.client_address)
+            self._emit_event('CONNECTED', info, detail='TLS passthrough tunnel connected' if is_tls else 'TCP connection established', mti='TLS' if is_tls else '')
+            self._emit_event(
+                'CONNECTED', info,
+                detail='TLS passthrough tunnel connected' if is_tls else 'TCP connection established',
+                mti='TLS' if is_tls else '',
+            )
             workers = [
                 threading.Thread(target=self._pump, args=(client, upstream, info, "client", suppress_responses, suppressed_code), daemon=True),
                 threading.Thread(target=self._pump, args=(upstream, client, info, "upstream", suppress_responses, suppressed_code), daemon=True),
@@ -166,10 +178,20 @@ class ProxyRuntime:
                      connection_id, info.bytes_from_client, info.bytes_from_upstream)
         except (OSError, TimeoutError) as exc:
             LOG.warning("[%s] Connection failed: %s", connection_id, exc)
+            self._emit_event('CONNECTION_ERROR', info, detail=f'Upstream connection failed: {exc}', mti='TLS' if is_tls else '')
+            self._emit_event('CONNECTION_ERROR', info, detail=f'Upstream connection failed: {exc}', mti='TLS' if is_tls else '')
         finally:
             for sock in (client, upstream):
                 if sock:
                     self._close_socket(sock)
+            if connected:
+                self._emit_event(
+                    'DISCONNECTED', info,
+                    detail=f'Connection closed; POS → Server {info.bytes_from_client} B, Server → POS {info.bytes_from_upstream} B',
+                    mti='TLS' if is_tls else '',
+                )
+            if connected:
+                self._emit_event('DISCONNECTED', info, detail=f'Connection closed; POS → Server {info.bytes_from_client} B, Server → POS {info.bytes_from_upstream} B', mti='TLS' if is_tls else '')
             with self._lock:
                 self._connections.pop(connection_id, None)
                 self._sockets.pop(connection_id, None)
@@ -193,9 +215,23 @@ class ProxyRuntime:
             except Exception:
                 LOG.exception('Event callback failed')
 
+    @staticmethod
+    def _raw_hex_detail(chunk: bytes) -> str:
+        preview = chunk[:4096].hex().upper()
+        suffix = f'... [truncated; {len(chunk)} bytes total]' if len(chunk) > 4096 else ''
+        return f'HEX chunk ({len(chunk)} bytes): {preview}{suffix}'
+
+    @staticmethod
+    def _raw_hex_detail(chunk: bytes) -> str:
+        preview = chunk[:4096].hex().upper()
+        suffix = f'... [truncated; {len(chunk)} bytes total]' if len(chunk) > 4096 else ''
+        return f'HEX chunk ({len(chunk)} bytes): {preview}{suffix}'
+
     def _pump(self, source: socket.socket, destination: socket.socket, info: ConnectionInfo, direction: str, suppress_responses: threading.Event, suppressed_code: dict) -> None:
         counter = "bytes_from_client" if direction == "client" else "bytes_from_upstream"
         framer = Iso8583StreamFramer() if self.profile.transport_label == 'tcp' else None
+        is_tls = self.profile.transport_label == 'tls_passthrough'
+        is_tls = self.profile.transport_label == 'tls_passthrough'
         try:
             while not self._stopping.is_set():
                 if not self._wait_for_forwarding(direction):
@@ -215,20 +251,16 @@ class ProxyRuntime:
                     return
 
                 if direction == 'upstream':
-                    if self.raw_hex_logging:
-                        preview = chunk[:4096].hex().upper()
-                        suffix = f'... [truncated; {len(chunk)} bytes total]' if len(chunk) > 4096 else ''
-                        self._emit_event('RAW_RESPONSE', info, suppressed_code['value'], f'HEX chunk ({len(chunk)} bytes): {preview}{suffix}')
+                    if self.raw_hex_logging and not is_tls:
+                        self._emit_event('RAW_RESPONSE', info, suppressed_code['value'], self._raw_hex_detail(chunk))
                     if suppress_responses.is_set():
                         self._emit_event('RESPONSE', info, suppressed_code['value'], 'Server response received')
                         self._emit_event('DROPPED', info, suppressed_code['value'], 'Server response suppressed by Processing Code rule')
                         continue
 
-                if direction == 'client' and self.raw_hex_logging:
-                    # Diagnostic only: keep capture in memory and bound each event.
-                    preview = chunk[:4096].hex().upper()
-                    suffix = f'... [truncated; {len(chunk)} bytes total]' if len(chunk) > 4096 else ''
-                    self._emit_event('RAW_REQUEST', info, detail=f'HEX chunk ({len(chunk)} bytes): {preview}{suffix}')
+                if direction == 'client' and self.raw_hex_logging and not is_tls:
+                    # Plain TCP diagnostics are captured before ISO8583 filtering, as before.
+                    self._emit_event('RAW_REQUEST', info, detail=self._raw_hex_detail(chunk))
 
                 outgoing_chunks = [chunk]
                 if framer is not None:
@@ -301,9 +333,26 @@ class ProxyRuntime:
                 if rate > 0 and self._stopping.wait(len(chunk) / rate):
                     return
 
+                forwarded_bytes = 0
                 for outgoing in outgoing_chunks:
                     destination.sendall(outgoing)
+                    forwarded_bytes += len(outgoing)
                     setattr(info, counter, getattr(info, counter) + len(outgoing))
+
+                if is_tls:
+                    # A TLS TCP chunk is opaque encrypted data, not an ISO8583 frame.
+                    # Emit transfer metadata only after sendall succeeds, so logs reflect
+                    # bytes actually forwarded through the tunnel.
+                    if self.raw_hex_logging:
+                        raw_type = 'RAW_REQUEST' if direction == 'client' else 'RAW_RESPONSE'
+                        self._emit_event(raw_type, info, detail='Encrypted TLS ' + self._raw_hex_detail(chunk))
+                    event_type = 'REQUEST' if direction == 'client' else 'RESPONSE'
+                    flow = 'POS → Server' if direction == 'client' else 'Server → POS'
+                    self._emit_event(
+                        event_type, info,
+                        detail=f'Encrypted TLS data forwarded {flow} ({forwarded_bytes} bytes)',
+                        mti='TLS',
+                    )
         except (ConnectionResetError, BrokenPipeError, OSError) as exc:
             LOG.debug("[%s] %s relay ended: %s", info.connection_id, direction, exc)
             try:
