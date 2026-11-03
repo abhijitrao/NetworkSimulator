@@ -173,8 +173,8 @@ class ProxyRuntime:
             LOG.info("[%s] Connected client %s", connection_id, info.client_address)
             self._emit_event('CONNECTED', info, detail='TLS passthrough tunnel connected' if is_tls else 'TCP connection established', mti='TLS' if is_tls else '')
             workers = [
-                threading.Thread(target=self._pump, args=(client, upstream, info, "client", suppress_responses, suppressed_code), daemon=True),
-                threading.Thread(target=self._pump, args=(upstream, client, info, "upstream", suppress_responses, suppressed_code), daemon=True),
+                threading.Thread(target=self._pump, args=(client, upstream, info, "client", suppress_responses, suppressed_code, response_rule_queue, response_rule_lock), daemon=True),
+                threading.Thread(target=self._pump, args=(upstream, client, info, "upstream", suppress_responses, suppressed_code, response_rule_queue, response_rule_lock), daemon=True),
             ]
             for worker in workers:
                 worker.start()
@@ -224,7 +224,7 @@ class ProxyRuntime:
         suffix = f'... [truncated; {len(chunk)} bytes total]' if len(chunk) > 4096 else ''
         return f'HEX chunk ({len(chunk)} bytes): {preview}{suffix}'
 
-    def _pump(self, source: socket.socket, destination: socket.socket, info: ConnectionInfo, direction: str, suppress_responses: threading.Event, suppressed_code: dict) -> None:
+    def _pump(self, source: socket.socket, destination: socket.socket, info: ConnectionInfo, direction: str, suppress_responses: threading.Event, suppressed_code: dict, response_rule_queue: deque, response_rule_lock: threading.Lock) -> None:
         counter = "bytes_from_client" if direction == "client" else "bytes_from_upstream"
         framer = Iso8583StreamFramer() if self.profile.transport_label == 'tcp' else None
         is_tls = self.profile.transport_label == 'tls_passthrough'
@@ -294,7 +294,7 @@ class ProxyRuntime:
                                         outgoing_chunks.append(frame)
                         # With no suppression rules, inspect complete request frames
                         # for metadata but forward every original TCP chunk immediately.
-                        elif not self.profile.processing_rules_enabled or not self.profile.processing_codes or not self.profile.processing_code_rules:
+                        elif not self.profile.processing_rules_enabled or not self.profile.processing_codes:
                             outgoing_chunks = [chunk]
                             for frame in frames:
                                 try:
@@ -304,6 +304,29 @@ class ProxyRuntime:
                                     self._emit_event('PARSE_ERROR', info, detail=str(exc))
                                     continue
                                 self._emit_event('REQUEST', info, code or '', 'ISO8583 request', mti)
+                        elif not self.profile.processing_code_rules:
+                            # Backward compatibility for profiles saved before per-code actions:
+                            # preserve their existing Request / Response / Both behavior.
+                            outgoing_chunks = []
+                            for frame in frames:
+                                try:
+                                    code = extract_processing_code(frame)
+                                    mti = extract_mti(frame)
+                                except Iso8583FrameError as exc:
+                                    self._emit_event('PARSE_ERROR', info, detail=str(exc))
+                                    outgoing_chunks.append(frame)
+                                    continue
+                                self._emit_event('REQUEST', info, code or '', 'ISO8583 request', mti)
+                                if code and code in self.profile.processing_codes:
+                                    rule_direction = self._fault_snapshot().apply_to
+                                    if rule_direction in {'response', 'both'}:
+                                        suppress_responses.set()
+                                        suppressed_code['value'] = code
+                                    if rule_direction in {'request', 'both'}:
+                                        self._emit_event('DROPPED', info, code, 'Request suppressed by Processing Code rule')
+                                        continue
+                                    self._emit_event('MATCHED', info, code, 'Request forwarded; server response suppression armed')
+                                outgoing_chunks.append(frame)
                         else:
                             outgoing_chunks = []
                             for frame in frames:
