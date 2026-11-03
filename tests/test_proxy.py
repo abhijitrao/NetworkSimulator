@@ -57,6 +57,36 @@ class ProxyTests(unittest.TestCase):
     def tearDown(self):
         self.manager.stop_all()
 
+    def test_connection_lifecycle_events_are_emitted_once(self):
+        client = socket.create_connection(("127.0.0.1", self.listen_port), timeout=2)
+        client.close()
+        deadline = time.monotonic() + 2
+        while time.monotonic() < deadline:
+            with self.events_lock:
+                types = [event["type"] for event in self.events]
+            if "DISCONNECTED" in types:
+                break
+            time.sleep(0.01)
+        with self.events_lock:
+            types = [event["type"] for event in self.events]
+        self.assertEqual(types.count("CONNECTED"), 1)
+        self.assertEqual(types.count("DISCONNECTED"), 1)
+
+    def test_connection_lifecycle_events_are_emitted_once(self):
+        client = socket.create_connection(("127.0.0.1", self.listen_port), timeout=2)
+        client.close()
+        deadline = time.monotonic() + 2
+        while time.monotonic() < deadline:
+            with self.events_lock:
+                types = [event["type"] for event in self.events]
+            if "DISCONNECTED" in types:
+                break
+            time.sleep(0.01)
+        with self.events_lock:
+            types = [event["type"] for event in self.events]
+        self.assertEqual(types.count("CONNECTED"), 1)
+        self.assertEqual(types.count("DISCONNECTED"), 1)
+
     def test_bidirectional_echo(self):
         payload = b"POS simulator test payload\x00\xff"
         with socket.create_connection(("127.0.0.1", self.listen_port), timeout=2) as client:

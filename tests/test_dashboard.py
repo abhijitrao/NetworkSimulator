@@ -89,6 +89,20 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(disabled.status_code, 200)
         self.assertFalse(any(e['type'] in {'RAW_REQUEST', 'RAW_RESPONSE'} for e in self.client.get('/api/events').json['events']))
 
+    def test_export_traffic_logs_as_text_oldest_first_including_raw_hex(self):
+        manager = self.app.extensions["proxy_manager"]
+        manager.on_event({"timestamp": 1700000020, "type": "RAW_RESPONSE", "profile": "Test", "mti": "", "processing_code": "", "connection_id": "c2", "detail": "HEX chunk AABB"})
+        manager.on_event({"timestamp": 1700000010, "type": "CONNECTED", "profile": "Test", "mti": "", "processing_code": "", "connection_id": "c1", "detail": "TCP connection established"})
+        manager.on_event({"timestamp": 1700000030, "type": "DISCONNECTED", "profile": "Test", "mti": "", "processing_code": "", "connection_id": "c1", "detail": "Connection closed"})
+        response = self.client.get("/api/events/export")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.mimetype, "text/plain")
+        self.assertIn("pos-traffic-logs.txt", response.headers["Content-Disposition"])
+        content = response.get_data(as_text=True)
+        self.assertLess(content.index("CONNECTED"), content.index("RAW_RESPONSE"))
+        self.assertLess(content.index("RAW_RESPONSE"), content.index("DISCONNECTED"))
+        self.assertIn("HEX chunk AABB", content)
+
     def test_reject_remote_client(self):
         response = self.client.get("/api/state", environ_overrides={"REMOTE_ADDR": "192.0.2.1"})
         self.assertEqual(response.status_code, 403)

@@ -22,3 +22,12 @@
 /* Show captured request/response HEX inside its metadata row. */
 .inline-raw-hex{margin-top:8px;padding-top:7px;border-top:1px solid var(--border,#263449);white-space:normal;overflow-wrap:anywhere;word-break:break-word;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px;line-height:1.5;color:var(--muted,#9fb2cc)}
 .inline-raw-hex>div+div{margin-top:4px}
+
+
+/* Traffic log fullscreen overlay */
+.event-panel-fullscreen{position:fixed;inset:12px;z-index:20;margin:0!important;padding:20px;background:#111a2c;border:1px solid #405474;border-radius:14px;box-shadow:0 18px 80px #000b;display:flex;flex-direction:column;min-height:0}
+.event-panel-fullscreen>.section-head{flex:0 0 auto}
+.event-panel-fullscreen>.event-columns{flex:0 0 auto}
+.event-panel-fullscreen>.event-log{flex:1 1 auto;min-height:0;max-height:none;overflow:auto}
+body.event-fullscreen-open{overflow:hidden}
+@media(max-width:700px){.event-panel-fullscreen{inset:6px;padding:12px}.event-panel-fullscreen>.section-head{gap:12px}.event-panel-fullscreen .section-actions{gap:7px}.event-panel-fullscreen .btn{padding:8px 10px}}

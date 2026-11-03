@@ -9,7 +9,7 @@ import sys
 import threading
 import webbrowser
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, Response, jsonify, render_template, request
 
 from simulator.network_interfaces import get_network_interfaces
 
@@ -221,6 +221,38 @@ def create_app(config_path: str | Path = CONFIG_PATH, manager: ProxyManager | No
         with event_lock:
             event_log.clear()
         return jsonify(ok=True)
+
+    @app.get("/api/events/export")
+    def export_events():
+        with event_lock:
+            events = sorted(event_log, key=lambda item: item.get("timestamp", 0))
+        lines = [
+            "POS Network Simulator - Traffic Event Log",
+            f"Total events: {len(events)}",
+            "Order: Oldest first, newest last",
+            "-" * 120,
+            "TIMESTAMP\tEVENT\tPROFILE\tMTI / TRANSPORT\tPROCESSING CODE\tCONNECTION ID\tDETAILS",
+            "-" * 120,
+        ]
+        from datetime import datetime
+        for item in events:
+            timestamp = datetime.fromtimestamp(item.get("timestamp", 0)).astimezone().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+            values = [
+                timestamp,
+                str(item.get("type", "")),
+                str(item.get("profile", "")),
+                str(item.get("mti", "") or "-"),
+                str(item.get("processing_code", "") or "-"),
+                str(item.get("connection_id", "") or "-"),
+                str(item.get("detail", "")).replace("\\r", " ").replace("\\n", " "),
+            ]
+            lines.append("\\t".join(values))
+        body = "\\n".join(lines) + "\\n"
+        return Response(
+            body,
+            mimetype="text/plain",
+            headers={"Content-Disposition": 'attachment; filename="pos-traffic-logs.txt"'},
+        )
 
     @app.post("/api/profiles/<profile_id>/abort")
     def abort_profile(profile_id: str):
