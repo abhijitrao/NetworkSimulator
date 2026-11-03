@@ -279,7 +279,7 @@ class ProxyRuntime:
                                 self._emit_event('RESPONSE', info, code, 'Server response received', mti)
                         # With no suppression rules, inspect complete request frames
                         # for metadata but forward every original TCP chunk immediately.
-                        elif not self.profile.processing_codes:
+                        elif not self.profile.processing_rules_enabled or not self.profile.processing_codes:
                             outgoing_chunks = [chunk]
                             for frame in frames:
                                 try:
