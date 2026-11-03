@@ -39,13 +39,16 @@ function profileCard(p) {
   html += '</div>';
   const sequence = p.request_sequence_fault || {enabled:p.request_sequence_enabled,orders:p.request_sequence_orders || [],counter:0,next_request:1};
   const processingEnabled = p.processing_rules_enabled !== false;
+  html += '<div class="profile-feature-pair">';
   html += '<section class="profile-feature"><div class="feature-heading"><strong>PROCESSING CODE RULES (DE 3)</strong><span class="feature-status ' + (p.transport_label === 'tcp' && processingEnabled ? 'on' : '') + '">' + (p.transport_label === 'tcp' ? (processingEnabled ? 'Enabled' : 'Disabled') : 'Unavailable · TLS') + '</span></div>';
   html += '<div class="feature-detail">' + (p.transport_label === 'tcp' ? esc((p.processing_codes || []).join(', ') || 'No processing codes configured') : 'Encrypted traffic cannot be inspected') + '</div>';
   if (p.transport_label === 'tcp') html += '<div class="feature-actions"><button class="small-btn" data-action="edit-processing" data-id="' + esc(p.id) + '">Edit</button></div>';
   html += '</section>';
   html += '<section class="profile-feature sequence-profile-panel"><div class="feature-heading"><strong>REQUEST SEQUENCE BLOCKING</strong><span class="feature-status ' + (sequence.enabled ? 'on' : '') + '">' + (sequence.enabled ? 'Enabled' : 'Disabled') + '</span></div>';
-  html += '<div class="feature-detail">Sequences: ' + esc((sequence.orders || []).join(', ') || 'None') + ' · Counter: ' + sequence.counter + '</div>';
+  html += '<div class="feature-detail">Sequences: ' + esc((sequence.orders || []).join(', ') || 'None') + ' · Counter: ' + esc(sequence.counter ?? 0) + '</div>';
+  html += '<div class="feature-detail next-counter-detail">Next Counter Blocking: ' + esc(sequence.next_request ?? ((Number(sequence.counter) || 0) + 1)) + '</div>';
   html += '<div class="feature-actions"><button class="small-btn" data-action="reset-sequence" data-id="' + esc(p.id) + '">Reset Counter</button><button class="small-btn" data-action="edit-sequence" data-id="' + esc(p.id) + '">Edit</button></div></section>';
+  html += '</div>';
   html += '<div class="fault-panel"><div class="fault-title">LIVE FAULT INJECTION</div><div class="fault-direction"><span>Apply faults to</span><label><input type="radio" name="direction-' + esc(p.id) + '" data-direction="request"' + ((fault.apply_to || 'request') === 'request' ? ' checked' : '') + '> Request (POS → Server)</label><label><input type="radio" name="direction-' + esc(p.id) + '" data-direction="response"' + (fault.apply_to === 'response' ? ' checked' : '') + '> Response (Server → POS)</label><label><input type="radio" name="direction-' + esc(p.id) + '" data-direction="both"' + (fault.apply_to === 'both' ? ' checked' : '') + '> Both</label></div><div class="fault-grid">';
   html += faultInput('Latency (ms)', 'latency_ms', fault.latency_ms || 0);
   html += faultInput('Jitter (ms)', 'jitter_ms', fault.jitter_ms || 0);
