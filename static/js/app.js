@@ -24,8 +24,22 @@ function esc(value) {
 }
 function runtimeOf(profile) { return profile.runtime || {running:false,active_connections:0,connections:[]}; }
 
+function activeFaultPreset(fault = {}) {
+  const latency = Number(fault.latency_ms) || 0;
+  const jitter = Number(fault.jitter_ms) || 0;
+  const bandwidth = Number(fault.bandwidth_bytes_per_second) || 0;
+  const pauseClient = !!fault.pause_client_to_upstream;
+  const pauseServer = !!fault.pause_upstream_to_client;
+  if (latency === 0 && jitter === 0 && bandwidth === 0 && !pauseClient && !pauseServer) return 'normal';
+  if (latency === 30000 && jitter === 0 && bandwidth === 0 && !pauseClient && !pauseServer) return 'slow';
+  if (latency === 55000 && jitter === 0 && bandwidth === 0 && !pauseClient && !pauseServer) return 'very-slow';
+  if (latency === 300 && jitter === 250 && bandwidth === 0 && !pauseClient && !pauseServer) return 'unstable';
+  if (latency === 0 && jitter === 0 && bandwidth === 0 && (pauseClient || pauseServer)) return 'no-response';
+  return 'custom';
+}
+
 function profileCard(p) {
-  const rt = runtimeOf(p), running = !!rt.running, fault = p.fault_profile || {};
+  const rt = runtimeOf(p), running = !!rt.running, fault = p.fault_profile || {}, activeFault = activeFaultPreset(fault);
   let html = '<article class="profile-card" data-id="' + esc(p.id) + '">';
   html += '<div class="card-top"><div><h3 class="profile-name">' + esc(p.name) + '</h3><p class="endpoint">' + esc(p.upstream_host) + ':' + p.upstream_port + '</p></div>';
   html += '<span class="status ' + (running ? 'running' : '') + '">' + (running ? '● Running' : '○ Stopped') + '</span></div>';
@@ -37,29 +51,33 @@ function profileCard(p) {
   html += '<button class="small-btn danger" data-action="delete" data-id="' + esc(p.id) + '"' + (running ? ' disabled' : '') + '>Delete</button>';
   if (running) html += '<button class="small-btn danger" data-action="abort" data-id="' + esc(p.id) + '">Abort connections</button>';
   html += '</div>';
-  if (p.transport_label === 'tcp') {
-    html += '<div class="fault-panel"><div class="fault-title">PROCESSING CODE RULES (DE 3)</div>';
-    html += '<label class="code-rule-label">Comma-separated 6-digit Processing Codes<textarea data-processing-codes rows="2" placeholder="960321, 000000">' + esc((p.processing_codes || []).join(', ')) + '</textarea></label>';
-    html += '<div class="apply-row"><button class="small-btn go" data-action="save-processing-codes" data-id="' + esc(p.id) + '">Save Processing Codes</button></div></div>';
-  } else {
-    html += '<div class="fault-panel"><div class="fault-title">PROCESSING CODE RULES</div><p class="endpoint">Unavailable in TLS passthrough because traffic is encrypted.</p></div>';
-  }
-  html += '<div class="fault-panel"><div class="fault-title">LIVE FAULT INJECTION</div><div class="fault-direction"><span>Apply faults to</span><label><input type="radio" name="direction-' + esc(p.id) + '" data-direction="request"' + ((fault.apply_to || 'request') === 'request' ? ' checked' : '') + '> Request (POS → Server)</label><label><input type="radio" name="direction-' + esc(p.id) + '" data-direction="response"' + (fault.apply_to === 'response' ? ' checked' : '') + '> Response (Server → POS)</label><label><input type="radio" name="direction-' + esc(p.id) + '" data-direction="both"' + (fault.apply_to === 'both' ? ' checked' : '') + '> Both</label></div><div class="fault-grid">';
+  const sequence = p.request_sequence_fault || {enabled:p.request_sequence_enabled,orders:p.request_sequence_orders || [],counter:0,next_request:1};
+  const processingEnabled = p.processing_rules_enabled !== false;
+  html += '<div class="profile-feature-pair">';
+  html += '<section class="profile-feature"><div class="feature-heading"><strong>PROCESSING CODE RULES (DE 3)</strong><span class="feature-status ' + (p.transport_label === 'tcp' && processingEnabled ? 'on' : '') + '">' + (p.transport_label === 'tcp' ? (processingEnabled ? 'Enabled' : 'Disabled') : 'Unavailable · TLS') + '</span></div>';
+  html += '<div class="feature-detail">' + (p.transport_label === 'tcp' ? esc((p.processing_codes || []).join(', ') || 'No processing codes configured') : 'Encrypted traffic cannot be inspected') + '</div>';
+  if (p.transport_label === 'tcp') html += '<div class="feature-actions"><button class="small-btn" data-action="edit-processing" data-id="' + esc(p.id) + '">Edit</button></div>';
+  html += '</section>';
+  html += '<section class="profile-feature sequence-profile-panel"><div class="feature-heading"><strong>REQUEST SEQUENCE BLOCKING</strong><span class="feature-status ' + (sequence.enabled ? 'on' : '') + '">' + (sequence.enabled ? 'Enabled' : 'Disabled') + '</span></div>';
+  html += '<div class="feature-detail sequence-summary"><span>Blocking Sequences: ' + esc((sequence.orders || []).join(', ') || 'None') + '</span><span>Counter: ' + esc(sequence.counter ?? 0) + ', Next Counter: ' + esc(sequence.next_request ?? ((Number(sequence.counter) || 0) + 1)) + '</span></div>';
+  html += '<div class="feature-actions"><button class="small-btn" data-action="reset-sequence" data-id="' + esc(p.id) + '">Reset Counter</button><button class="small-btn" data-action="edit-sequence" data-id="' + esc(p.id) + '">Edit</button></div></section>';
+  html += '</div>';
+  html += '<div class="fault-panel"><div class="fault-title">LIVE FAULT INJECTION</div><div class="fault-direction"><span>Apply faults to</span><label><input type="radio" name="direction-' + esc(p.id) + '" data-direction="request"' + ((fault.apply_to || 'request') === 'request' ? ' checked' : '') + '> Request (App → Server)</label><label><input type="radio" name="direction-' + esc(p.id) + '" data-direction="response"' + (fault.apply_to === 'response' ? ' checked' : '') + '> Response (Server → App)</label><label><input type="radio" name="direction-' + esc(p.id) + '" data-direction="both"' + (fault.apply_to === 'both' ? ' checked' : '') + '> Both</label></div><div class="fault-grid">';
   html += faultInput('Latency (ms)', 'latency_ms', fault.latency_ms || 0);
   html += faultInput('Jitter (ms)', 'jitter_ms', fault.jitter_ms || 0);
   html += faultInput('Bandwidth (B/s)', 'bandwidth_bytes_per_second', fault.bandwidth_bytes_per_second || 0);
   html += '</div><div class="fault-checks">';
   const pauseEnabled = fault.apply_to === 'response' ? fault.pause_upstream_to_client : fault.apply_to === 'both' ? (fault.pause_client_to_upstream || fault.pause_upstream_to_client) : fault.pause_client_to_upstream;
   html += faultCheck('Pause traffic', 'pause_enabled', pauseEnabled);
-  html += '</div><div class="apply-row"><button class="small-btn" data-action="normal" data-id="' + esc(p.id) + '">Normal</button>';
-  html += '<button class="small-btn" data-action="preset" data-preset="slow" data-id="' + esc(p.id) + '"' + (running ? '' : ' disabled') + '>Slow 30s</button>';
-  html += '<button class="small-btn" data-action="preset" data-preset="very-slow" data-id="' + esc(p.id) + '"' + (running ? '' : ' disabled') + '>Very slow 55s</button>';
-  html += '<button class="small-btn" data-action="preset" data-preset="unstable" data-id="' + esc(p.id) + '"' + (running ? '' : ' disabled') + '>Unstable</button>';
-  html += '<button class="small-btn" data-action="preset" data-preset="no-response" data-id="' + esc(p.id) + '"' + (running ? '' : ' disabled') + '>No response</button>';
-  html += '<button class="small-btn go" data-action="apply-fault" data-id="' + esc(p.id) + '"' + (running ? '' : ' disabled title="Start proxy first"') + '>Apply custom</button></div></div>';
+  html += '</div><div class="apply-row"><button class="small-btn ' + (activeFault === 'normal' ? 'active' : '') + '" data-action="normal" data-id="' + esc(p.id) + '">Normal</button>';
+  html += '<button class="small-btn ' + (activeFault === 'slow' ? 'active' : '') + '" data-action="preset" data-preset="slow" data-id="' + esc(p.id) + '"' + (running ? '' : ' disabled') + '>Slow 30s</button>';
+  html += '<button class="small-btn ' + (activeFault === 'very-slow' ? 'active' : '') + '" data-action="preset" data-preset="very-slow" data-id="' + esc(p.id) + '"' + (running ? '' : ' disabled') + '>Very slow 55s</button>';
+  html += '<button class="small-btn ' + (activeFault === 'unstable' ? 'active' : '') + '" data-action="preset" data-preset="unstable" data-id="' + esc(p.id) + '"' + (running ? '' : ' disabled') + '>Unstable</button>';
+  html += '<button class="small-btn ' + (activeFault === 'no-response' ? 'active' : '') + '" data-action="preset" data-preset="no-response" data-id="' + esc(p.id) + '"' + (running ? '' : ' disabled') + '>No response</button>';
+  html += '<button class="small-btn custom-apply ' + (activeFault === 'custom' ? 'active' : '') + '" data-action="apply-fault" data-id="' + esc(p.id) + '"' + (running ? '' : ' disabled title="Start proxy first"') + '>Apply custom</button></div></div>';
   if (rt.connections && rt.connections.length) {
     html += '<div class="fault-panel"><div class="fault-title">ACTIVE CONNECTIONS</div>';
-    rt.connections.forEach(c => { html += '<div class="endpoint">' + esc(c.client) + ' · POS → Server ' + c.bytes_from_client + ' B · Server → POS ' + c.bytes_from_upstream + ' B</div>'; });
+    rt.connections.forEach(c => { html += '<div class="endpoint">' + esc(c.client) + ' · App → Server ' + c.bytes_from_client + ' B · Server → App ' + c.bytes_from_upstream + ' B</div>'; });
     html += '</div>';
   }
   return html + '</article>';
@@ -116,16 +134,16 @@ function renderPosConnections() {
   }
   const enabledProfiles = state.filter(p => p.enabled);
   if (!enabledProfiles.length) {
-    target.innerHTML = '<div class="empty">Enable a profile to display its POS connection details.</div>';
+    target.innerHTML = '<div class="empty">Enable a profile to display its App connection details.</div>';
     return;
   }
   target.innerHTML = enabledProfiles.map(p => {
     const endpoint = host + ':' + p.listen_port;
     const running = !!runtimeOf(p).running;
     return '<article class="pos-connection-card"><div class="pos-connection-top"><strong>' + esc(p.name) + '</strong><span class="status ' + (running ? 'running' : '') + '">' + (running ? '● Running' : '○ Stopped') + '</span></div>' +
-      '<p class="pos-instruction">Enter these details in POS Device → Server Configuration</p>' +
+      '<p class="pos-instruction">Enter these details in App → Server Configuration</p>' +
       '<div class="pos-endpoint">' + esc(endpoint) + '</div>' +
-      '<div class="pos-fields"><span>POS Server IP <b>' + esc(host) + '</b></span><span>POS Server Port <b>' + p.listen_port + '</b></span></div>' +
+      '<div class="pos-fields"><span>App Server IP <b>' + esc(host) + '</b></span><span>App Server Port <b>' + p.listen_port + '</b></span></div>' +
       '<button class="small-btn copy-endpoint" type="button" data-copy="' + esc(endpoint) + '">Copy IP:Port</button></article>';
   }).join('');
 }
@@ -221,7 +239,12 @@ function openDialog(profile = null) {
 }
 
 function formPayload(id) {
+  const existing = state.find(profile => profile.id === id);
   return {id: id || undefined, name:$('profileName').value.trim(), transport_label:$('transport').value,
+    request_sequence_enabled:existing?.request_sequence_enabled ?? false,
+    request_sequence_orders:existing?.request_sequence_orders || [],
+    processing_rules_enabled:existing?.processing_rules_enabled ?? true,
+    processing_codes:existing?.processing_codes || [],
     upstream_host:$('upstreamHost').value.trim(), upstream_port:Number($('upstreamPort').value),
     listen_port:Number($('listenPort').value), bind_host:$('bindHost').value,
     connect_timeout_ms:Number($('connectTimeout').value), notes:$('notes').value.trim(), enabled:$('enabled').checked,
@@ -245,11 +268,13 @@ $('profileList').addEventListener('click', async (event) => {
   const id = button.dataset.id, action = button.dataset.action, profile = state.find(p => p.id === id);
   try {
     if (action === 'edit') openDialog(profile);
-    else if (action === 'save-processing-codes') {
-      const raw = button.closest('.profile-card').querySelector('[data-processing-codes]').value;
-      const codes = raw.split(/[ ,;\\n]+/).map(value => value.trim()).filter(Boolean);
-      await api('/api/profiles/' + encodeURIComponent(id) + '/processing-codes', {method:'POST', body:JSON.stringify({processing_codes:codes,apply_to:selectedDirection(button.closest('.profile-card'))})});
-      await refresh(); toast('Processing Code rules saved');
+    else if (action === 'edit-processing') openFeatureDialog('processing', profile);
+    else if (action === 'edit-sequence') openFeatureDialog('sequence', profile);
+    else if (action === 'reset-sequence') {
+      if (confirm('Reset the request counter for profile "' + profile.name + '" to 0?')) {
+        await api('/api/profiles/' + encodeURIComponent(id) + '/request-sequence-fault/reset', {method:'POST',body:'{}'});
+        await refresh(); toast('Request counter reset for ' + profile.name);
+      }
     }
     else if (action === 'preset') {
       const presets = {
@@ -301,6 +326,36 @@ $('profileList').addEventListener('click', async (event) => {
     }
   } catch(e) { toast(e.message); }
 });
+
+function openFeatureDialog(type, profile) {
+  const sequence = profile.request_sequence_fault || {enabled:profile.request_sequence_enabled,orders:profile.request_sequence_orders || []};
+  $('featureDialogTitle').textContent = type === 'processing' ? 'Processing Code Rules (DE 3)' : 'Request Sequence Blocking';
+  $('featureDialogType').value = type;
+  $('featureDialogProfileId').value = profile.id;
+  $('featureEnabled').checked = type === 'processing' ? profile.processing_rules_enabled !== false : !!sequence.enabled;
+  $('featureValuesLabel').textContent = type === 'processing' ? 'Processing Codes (6 digits, comma-separated)' : 'Block request numbers (comma-separated)';
+  $('featureValues').value = type === 'processing' ? (profile.processing_codes || []).join(', ') : (sequence.orders || []).join(', ');
+  $('featureValues').placeholder = type === 'processing' ? '000000, 003000' : '2, 3, 5';
+  $('featureDialog').showModal();
+}
+$('featureForm').addEventListener('submit', async event => {
+  event.preventDefault();
+  const id = $('featureDialogProfileId').value, type = $('featureDialogType').value, raw = $('featureValues').value.trim();
+  try {
+    if (type === 'processing') {
+      const codes = raw ? raw.split(/[ ,;\n]+/).map(value => value.trim()).filter(Boolean) : [];
+      if (codes.some(value => !/^\d{6}$/.test(value))) throw new Error('Each Processing Code must contain exactly 6 digits');
+      await api('/api/profiles/' + encodeURIComponent(id) + '/processing-codes', {method:'POST',body:JSON.stringify({processing_codes:codes,enabled:$('featureEnabled').checked})});
+    } else {
+      const orders = raw ? raw.split(',').map(value => value.trim()).filter(Boolean) : [];
+      if (orders.some(value => !/^\d+$/.test(value) || Number(value) < 1)) throw new Error('Enter positive request numbers separated by commas, for example: 2, 3, 5');
+      await api('/api/profiles/' + encodeURIComponent(id) + '/request-sequence-fault', {method:'POST',body:JSON.stringify({enabled:$('featureEnabled').checked,orders})});
+    }
+    $('featureDialog').close(); await refresh(); toast('Settings saved');
+  } catch(e) { toast(e.message); }
+});
+$('closeFeatureDialog').addEventListener('click', () => $('featureDialog').close());
+$('cancelFeatureDialog').addEventListener('click', () => $('featureDialog').close());
 
 $('addProfileBtn').addEventListener('click', () => openDialog());
 $('closeDialog').addEventListener('click', () => $('profileDialog').close());

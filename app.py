@@ -47,7 +47,6 @@ def create_app(config_path: str | Path = CONFIG_PATH, manager: ProxyManager | No
     proxy_manager = manager or ProxyManager(on_event=record_event)
     proxy_manager.on_event = record_event
     state_lock = threading.RLock()
-
     if not Path(config_path).exists() and EXAMPLE_PATH.exists():
         examples = [ProxyProfile.from_dict(item) for item in json.loads(EXAMPLE_PATH.read_text(encoding="utf-8"))]
         for profile in examples:
@@ -62,6 +61,12 @@ def create_app(config_path: str | Path = CONFIG_PATH, manager: ProxyManager | No
             if item.id == profile_id:
                 return item
         raise LookupError("Profile not found")
+
+    # Restore each profile's sequence settings; counters always restart at zero.
+    for saved_profile in profiles():
+        proxy_manager.configure_request_sequence_fault(
+            saved_profile.id, saved_profile.request_sequence_enabled, saved_profile.request_sequence_orders
+        )
 
     @app.before_request
     def restrict_management_to_localhost():
@@ -87,6 +92,7 @@ def create_app(config_path: str | Path = CONFIG_PATH, manager: ProxyManager | No
         status_by_id = {item["profile_id"]: item for item in proxy_manager.status()}
         return jsonify(profiles=[{
             **profile.to_dict(),
+            "request_sequence_fault": proxy_manager.request_sequence_status(profile.id),
             "runtime": status_by_id.get(profile.id, {"running": False, "active_connections": 0, "connections": []}),
         } for profile in items])
 
@@ -175,6 +181,10 @@ def create_app(config_path: str | Path = CONFIG_PATH, manager: ProxyManager | No
             if profile.transport_label != "tcp" and codes:
                 return jsonify(error="Processing Code rules are supported only for Plain TCP profiles"), 400
             profile.processing_codes = codes
+            enabled = payload.get("enabled", profile.processing_rules_enabled)
+            if not isinstance(enabled, bool):
+                return jsonify(error="enabled must be a boolean"), 400
+            profile.processing_rules_enabled = enabled
             if apply_to is not None:
                 profile.fault_profile.apply_to = apply_to
                 profile.fault_profile.validate()
@@ -185,11 +195,48 @@ def create_app(config_path: str | Path = CONFIG_PATH, manager: ProxyManager | No
             except ValueError:
                 pass
         try:
-            proxy_manager.set_processing_codes(profile_id, codes)
+            proxy_manager.set_processing_codes(profile_id, codes, profile.processing_rules_enabled)
         except ValueError:
             # A stopped profile will use the saved values when it starts.
             pass
-        return jsonify(ok=True, processing_codes=codes, apply_to=apply_to)
+        return jsonify(ok=True, processing_codes=codes, enabled=profile.processing_rules_enabled, apply_to=apply_to)
+
+    @app.post("/api/profiles/<profile_id>/request-sequence-fault")
+    def set_request_sequence_fault(profile_id: str):
+        payload = request.get_json(force=True) or {}
+        enabled = payload.get("enabled", False)
+        raw_orders = payload.get("orders", [])
+        if not isinstance(enabled, bool):
+            return jsonify(error="enabled must be a boolean"), 400
+        if isinstance(raw_orders, str):
+            raw_orders = [part.strip() for part in raw_orders.split(",") if part.strip()]
+        if not isinstance(raw_orders, list):
+            return jsonify(error="orders must be a comma-separated string or array"), 400
+        try:
+            orders = sorted(set(int(value) for value in raw_orders))
+            if any(value < 1 for value in orders):
+                raise ValueError("Request order numbers must be greater than zero")
+            with state_lock:
+                items = profiles()
+                profile = find_profile(profile_id, items)
+                profile.request_sequence_enabled = enabled
+                profile.request_sequence_orders = orders
+                store.save(items)
+            status = proxy_manager.configure_request_sequence_fault(profile_id, enabled, orders)
+        except (TypeError, ValueError) as exc:
+            return jsonify(error=str(exc)), 400
+        except LookupError as exc:
+            return jsonify(error=str(exc)), 404
+        return jsonify(ok=True, **status)
+
+    @app.post("/api/profiles/<profile_id>/request-sequence-fault/reset")
+    def reset_request_sequence_fault(profile_id: str):
+        try:
+            find_profile(profile_id)
+            status = proxy_manager.reset_request_sequence_fault(profile_id)
+        except LookupError as exc:
+            return jsonify(error=str(exc)), 404
+        return jsonify(ok=True, **status)
 
     @app.get("/api/diagnostics/raw-hex")
     def get_raw_hex_setting():

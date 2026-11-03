@@ -80,3 +80,46 @@ body.event-fullscreen-open{overflow:hidden}
 @media(max-width:1100px){
   .event-panel-fullscreen>.section-head{grid-template-columns:1fr}
 }
+
+.sequence-fault-panel{display:grid;grid-template-columns:minmax(0,1fr) minmax(320px,1fr);gap:24px;margin:0 0 22px;padding:22px;background:linear-gradient(145deg,#17243a,#111a2c);border:1px solid #3b4e6d;border-radius:14px}.sequence-fault-panel h2{font-size:20px;margin:0}.sequence-fault-panel .muted{font-size:12px;line-height:1.6}.sequence-controls{display:grid;gap:12px}.sequence-orders-label{display:grid;gap:6px;color:#aebbd0;font-size:11px}.sequence-orders-label input{width:100%;background:#0c1424;color:#eef4ff;border:1px solid #33435e;border-radius:8px;padding:11px;font:13px Consolas,monospace}.sequence-actions{display:flex;gap:9px;flex-wrap:wrap}.sequence-status{margin:0;color:#9de8ca;font-size:11px}@media(max-width:800px){.sequence-fault-panel{grid-template-columns:1fr}}
+
+/* Request sequence controls live inside each profile card. */
+.sequence-profile-panel{display:grid;gap:10px}
+.sequence-profile-panel .sequence-orders-label{display:grid;gap:6px;color:#aebbd0;font-size:10px}
+.sequence-profile-panel .sequence-orders-label input{width:100%;background:#0c1424;color:#eef4ff;border:1px solid #33435e;border-radius:8px;padding:9px;font:12px Consolas,monospace}
+.sequence-profile-panel .sequence-status{margin:0;color:#9de8ca;font-size:10px;overflow-wrap:anywhere}
+
+/* Two-column profile feature layout with a subtle center divider. */
+.profile-feature-pair{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);margin-top:14px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.profile-feature-pair .profile-feature{min-width:0;margin:0;padding:13px 12px 13px 0;border:0}
+.profile-feature-pair .profile-feature+.profile-feature{padding:13px 0 13px 14px;border-left:1px solid #34425d}
+.feature-heading{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.feature-heading strong{font-size:11px;font-weight:650;color:#d9e5f7;line-height:1.4}
+.feature-status{font-size:10px;color:#f3d18a;white-space:nowrap}
+.feature-status.on{color:#72e0b6}
+.feature-detail{font-size:10px;color:#aebed8;margin-top:7px;line-height:1.45;overflow-wrap:anywhere}
+.next-counter-detail{color:#9de8ca}
+.feature-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:9px}
+@media(max-width:560px){.profile-feature-pair{grid-template-columns:1fr}.profile-feature-pair .profile-feature{padding:12px 0}.profile-feature-pair .profile-feature+.profile-feature{border-left:0;border-top:1px solid #34425d}}
+.feature-enable{margin:0 0 14px}
+.feature-values-label{display:block;color:#aebbd0;font-size:11px;margin-bottom:6px}
+#featureValues{display:block;width:100%;resize:vertical;min-height:76px;background:#0c1424;color:#eef4ff;border:1px solid #33435e;border-radius:8px;padding:10px;font:12px Consolas,monospace}
+#featureDialog .dialog-head{margin-bottom:16px}
+#featureDialog .dialog-actions{margin-top:18px}
+
+/* Keep sequence details compact and avoid a doubled divider before fault injection. */
+.sequence-summary{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.sequence-summary span{white-space:nowrap}
+.profile-feature-pair+.fault-panel{border-top:0}
+@media(max-width:560px){.sequence-summary{align-items:flex-start;flex-direction:column;gap:5px}.sequence-summary span{white-space:normal}}
+
+/* Fault injection presets: consistent spacing and clear active-state feedback. */
+.apply-row{gap:8px;flex-wrap:wrap}
+.apply-row .small-btn.active{background:#245b49;border-color:#43b88c;color:#eafff6;box-shadow:0 0 0 1px #43b88c inset}
+.apply-row .small-btn.go.active{background:#26775c;border-color:#55d5a5;color:#fff}
+.apply-row .small-btn.active:hover{filter:brightness(1.12)}
+
+/* Apply Custom uses a neutral blue until selected; active options use green. */
+.apply-row .small-btn.custom-apply{background:#29466d;border-color:#426895;color:#e8f1ff}
+.apply-row .small-btn.custom-apply:hover{background:#345783}
+.apply-row .small-btn.custom-apply.active{background:#245b49;border-color:#43b88c;color:#eafff6;box-shadow:0 0 0 1px #43b88c inset}

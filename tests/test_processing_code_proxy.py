@@ -121,5 +121,61 @@ class ProcessingCodeProxyTests(unittest.TestCase):
         self.assertTrue(any(e["type"] == "DROPPED" and e["processing_code"] == "960321" for e in self.events))
 
 
+    def test_profile_request_sequence_blocks_selected_connection_responses(self):
+        self.manager.set_processing_codes(self.profile.id, [])
+        self.manager.configure_request_sequence_fault(self.profile.id, True, [2, 3, 5])
+        tls_profile = ProxyProfile.from_dict({
+            **self.profile.to_dict(),
+            "id": str(uuid.uuid4()),
+            "name": "TLS sequence test",
+            "listen_port": self.profile.listen_port + 1,
+            "transport_label": "tls_passthrough",
+            "processing_codes": [],
+        })
+        self.manager.start(tls_profile)
+
+        # Request 1 on TCP is forwarded and its echo response reaches the POS.
+        with socket.create_connection(("127.0.0.1", self.profile.listen_port), timeout=2) as first:
+            first.settimeout(2)
+            first.sendall(SAMPLE)
+            self.assertEqual(first.recv(len(SAMPLE)), SAMPLE)
+        self.assertEqual(self.manager.request_sequence_status(self.profile.id)["counter"], 1)
+
+        # Request 2 is still forwarded to the host, but its response is not returned.
+        RecordingEchoHandler.received_event.clear()
+        with socket.create_connection(("127.0.0.1", self.profile.listen_port), timeout=2) as second:
+            second.settimeout(0.4)
+            second.sendall(SAMPLE)
+            self.assertTrue(RecordingEchoHandler.received_event.wait(1))
+            with self.assertRaises(socket.timeout):
+                second.recv(4096)
+
+        self.assertEqual(len(RecordingEchoHandler.received), 2)
+        self.assertEqual(self.manager.request_sequence_status(self.profile.id)["counter"], 2)
+        self.assertTrue(any(e["type"] == "SEQUENCE_BLOCKED" and "Request #2" in e["detail"] for e in self.events))
+
+    def test_sequence_reset_and_order_change_restart_counter(self):
+        self.manager.configure_request_sequence_fault(self.profile.id, True, [2, 3, 5])
+        self.assertEqual(self.manager._on_request_accepted(self.profile.id), (1, False))
+        self.assertEqual(self.manager._on_request_accepted(self.profile.id), (2, True))
+        self.assertEqual(self.manager.reset_request_sequence_fault(self.profile.id)["counter"], 0)
+        self.assertEqual(self.manager._on_request_accepted(self.profile.id), (1, False))
+        status = self.manager.configure_request_sequence_fault(self.profile.id, True, [4])
+        self.assertEqual(status["counter"], 0)
+        self.assertEqual(self.manager._on_request_accepted(self.profile.id), (1, False))
+        self.assertEqual(self.manager.configure_request_sequence_fault(self.profile.id, False, [4])["counter"], 0)
+        self.assertIsNone(self.manager._on_request_accepted(self.profile.id))
+
+    def test_sequence_counters_are_independent_per_profile(self):
+        second_id = str(uuid.uuid4())
+        self.manager.configure_request_sequence_fault(self.profile.id, True, [2])
+        self.manager.configure_request_sequence_fault(second_id, True, [1])
+
+        self.assertEqual(self.manager._on_request_accepted(self.profile.id), (1, False))
+        self.assertEqual(self.manager._on_request_accepted(second_id), (1, True))
+        self.assertEqual(self.manager._on_request_accepted(self.profile.id), (2, True))
+        self.assertEqual(self.manager.request_sequence_status(self.profile.id)["counter"], 2)
+        self.assertEqual(self.manager.request_sequence_status(second_id)["counter"], 1)
+
 if __name__ == "__main__":
     unittest.main()

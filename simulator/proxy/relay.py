@@ -30,10 +30,11 @@ class ConnectionInfo:
 
 
 class ProxyRuntime:
-    def __init__(self, profile: ProxyProfile, on_connection_change: Callable[[], None] | None = None, on_event: Callable[[dict], None] | None = None):
+    def __init__(self, profile: ProxyProfile, on_connection_change: Callable[[], None] | None = None, on_event: Callable[[dict], None] | None = None, on_request_accepted: Callable[[], tuple[int, bool] | None] | None = None):
         self.profile = profile
         self.on_connection_change = on_connection_change
         self.on_event = on_event
+        self.on_request_accepted = on_request_accepted
         self.raw_hex_logging = False
         self._lock = threading.RLock()
         self._fault_condition = threading.Condition(self._lock)
@@ -141,8 +142,18 @@ class ProxyRuntime:
             self._sockets[connection_id] = {client}
         self._notify()
         suppress_responses = threading.Event()
-        suppressed_code = {'value': ''}
+        suppressed_code = {'value': '', 'reason': 'Processing Code rule'}
+        sequence_number = None
         try:
+            sequence = self.on_request_accepted() if self.on_request_accepted else None
+            if sequence is not None:
+                sequence_number, block_response = sequence
+                if block_response:
+                    suppress_responses.set()
+                    suppressed_code['reason'] = 'Request Sequence No Response fault'
+                    self._emit_event('SEQUENCE_BLOCKED', info, detail=f'Request #{sequence_number} selected for No Response; request will be forwarded and host response suppressed', mti='TLS' if is_tls else '')
+                else:
+                    self._emit_event('SEQUENCE_REQUEST', info, detail=f'Request #{sequence_number} allowed', mti='TLS' if is_tls else '')
             if self._stopping.is_set():
                 return
             client.settimeout(None)
@@ -237,7 +248,7 @@ class ProxyRuntime:
                         self._emit_event('RAW_RESPONSE', info, suppressed_code['value'], self._raw_hex_detail(chunk))
                     if suppress_responses.is_set():
                         self._emit_event('RESPONSE', info, suppressed_code['value'], 'Server response received')
-                        self._emit_event('DROPPED', info, suppressed_code['value'], 'Server response suppressed by Processing Code rule')
+                        self._emit_event('DROPPED', info, suppressed_code['value'], f'Server response suppressed by {suppressed_code["reason"]}')
                         continue
 
                 if direction == 'client' and self.raw_hex_logging and not is_tls:
@@ -268,7 +279,7 @@ class ProxyRuntime:
                                 self._emit_event('RESPONSE', info, code, 'Server response received', mti)
                         # With no suppression rules, inspect complete request frames
                         # for metadata but forward every original TCP chunk immediately.
-                        elif not self.profile.processing_codes:
+                        elif not self.profile.processing_rules_enabled or not self.profile.processing_codes:
                             outgoing_chunks = [chunk]
                             for frame in frames:
                                 try:
