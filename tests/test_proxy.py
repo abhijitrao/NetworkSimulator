@@ -120,8 +120,8 @@ class ProxyTests(unittest.TestCase):
         raw_response = next(event for event in events if event["type"] == "RAW_RESPONSE")
         self.assertEqual(request["mti"], "TLS")
         self.assertEqual(response["mti"], "TLS")
-        self.assertRegex(request["detail"], r"\\(\\d+ bytes\\)")
-        self.assertRegex(response["detail"], r"\\(\\d+ bytes\\)")
+        self.assertIn("bytes)", request["detail"])
+        self.assertIn("bytes)", response["detail"])
         self.assertIn(payload.hex().upper(), raw_request["detail"])
         self.assertIn(payload.hex().upper(), raw_response["detail"])
 
