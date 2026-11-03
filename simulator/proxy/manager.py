@@ -15,6 +15,10 @@ class ProxyManager:
         self._runtimes: dict[str, ProxyRuntime] = {}
         self.on_event = on_event
         self.raw_hex_logging = False
+        self._sequence_lock = threading.RLock()
+        self._sequence_enabled = False
+        self._sequence_orders: set[int] = set()
+        self._sequence_counter = 0
 
     def start(self, profile: ProxyProfile) -> None:
         profile.validate()
@@ -27,7 +31,7 @@ class ProxyManager:
                     runtime.profile.bind_host in {"0.0.0.0", "::"} or profile.bind_host in {"0.0.0.0", "::"}
                 ):
                     raise ValueError(f"Listener port {profile.listen_port} is already used by profile {profile_id}")
-            runtime = ProxyRuntime(profile, on_event=self.on_event)
+            runtime = ProxyRuntime(profile, on_event=self.on_event, on_request_accepted=self._on_request_accepted)
             runtime.set_raw_hex_logging(profile.raw_hex_logging or self.raw_hex_logging)
             runtime.start()
             self._runtimes[profile.id] = runtime
@@ -44,6 +48,40 @@ class ProxyManager:
             self._runtimes.clear()
         for runtime in runtimes:
             runtime.stop()
+
+    def configure_request_sequence_fault(self, enabled: bool, orders: list[int]) -> dict:
+        normalized = sorted(set(int(value) for value in orders))
+        if any(value < 1 for value in normalized):
+            raise ValueError("Request order numbers must be greater than zero")
+        with self._sequence_lock:
+            changed = bool(enabled) != self._sequence_enabled or set(normalized) != self._sequence_orders
+            self._sequence_enabled = bool(enabled)
+            self._sequence_orders = set(normalized)
+            if changed:
+                self._sequence_counter = 0
+            return self.request_sequence_status()
+
+    def reset_request_sequence_fault(self) -> dict:
+        with self._sequence_lock:
+            self._sequence_counter = 0
+            return self.request_sequence_status()
+
+    def request_sequence_status(self) -> dict:
+        with self._sequence_lock:
+            return {
+                "enabled": self._sequence_enabled,
+                "orders": sorted(self._sequence_orders),
+                "counter": self._sequence_counter,
+                "next_request": self._sequence_counter + 1,
+            }
+
+    def _on_request_accepted(self) -> tuple[int, bool] | None:
+        with self._sequence_lock:
+            if not self._sequence_enabled:
+                return None
+            self._sequence_counter += 1
+            number = self._sequence_counter
+            return number, number in self._sequence_orders
 
     def set_raw_hex_logging(self, enabled: bool) -> None:
         with self._lock:
