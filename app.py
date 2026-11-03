@@ -244,10 +244,10 @@ def create_app(config_path: str | Path = CONFIG_PATH, manager: ProxyManager | No
                 str(item.get("mti", "") or "-"),
                 str(item.get("processing_code", "") or "-"),
                 str(item.get("connection_id", "") or "-"),
-                str(item.get("detail", "")).replace("\\r", " ").replace("\\n", " "),
+                str(item.get("detail", "")).replace("\r", " ").replace("\n", " ").replace("\t", " "),
             ]
-            lines.append("\\t".join(values))
-        body = "\\n".join(lines) + "\\n"
+            lines.append("\t".join(values))
+        body = "\n".join(lines) + "\n"
         return Response(
             body,
             mimetype="text/plain",
