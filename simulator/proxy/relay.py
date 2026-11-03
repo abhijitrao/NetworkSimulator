@@ -30,10 +30,11 @@ class ConnectionInfo:
 
 
 class ProxyRuntime:
-    def __init__(self, profile: ProxyProfile, on_connection_change: Callable[[], None] | None = None, on_event: Callable[[dict], None] | None = None):
+    def __init__(self, profile: ProxyProfile, on_connection_change: Callable[[], None] | None = None, on_event: Callable[[dict], None] | None = None, on_request_accepted: Callable[[], tuple[int, bool] | None] | None = None):
         self.profile = profile
         self.on_connection_change = on_connection_change
         self.on_event = on_event
+        self.on_request_accepted = on_request_accepted
         self.raw_hex_logging = False
         self._lock = threading.RLock()
         self._fault_condition = threading.Condition(self._lock)
@@ -142,7 +143,16 @@ class ProxyRuntime:
         self._notify()
         suppress_responses = threading.Event()
         suppressed_code = {'value': ''}
+        sequence_number = None
         try:
+            sequence = self.on_request_accepted() if self.on_request_accepted else None
+            if sequence is not None:
+                sequence_number, block_response = sequence
+                if block_response:
+                    suppress_responses.set()
+                    self._emit_event('SEQUENCE_BLOCKED', info, detail=f'Request #{sequence_number} selected for No Response; request will be forwarded and host response suppressed', mti='TLS' if is_tls else '')
+                else:
+                    self._emit_event('SEQUENCE_REQUEST', info, detail=f'Request #{sequence_number} allowed', mti='TLS' if is_tls else '')
             if self._stopping.is_set():
                 return
             client.settimeout(None)
