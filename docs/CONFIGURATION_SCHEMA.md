@@ -43,3 +43,12 @@ Connection abort and upstream connect failure are connection-level actions. Do n
 - Bind proxy listeners only to an explicitly selected interface.
 - Do not log application payloads or payment data.
 - TLS remains end-to-end. Do not install a root CA, terminate TLS, weaken certificate verification, or collect decrypted data.
+
+## Global request sequence fault
+
+- The optional request sequence fault is global across all running profiles and transport labels.
+- One newly accepted POS TCP connection counts as one request; this relies on the POS opening a new connection for each request.
+- Configure comma-separated positive request numbers, for example `2, 3, 5`.
+- Selected requests are forwarded to the upstream host, while upstream response bytes are suppressed so the POS receives no response and can reach its own timeout handling.
+- Reset or changing the enabled state / configured order list restarts the counter at request 1.
+- Settings are persisted separately from endpoint profiles. The runtime counter starts at zero when the simulator process starts.
