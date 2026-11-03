@@ -142,7 +142,7 @@ class ProxyRuntime:
             self._sockets[connection_id] = {client}
         self._notify()
         suppress_responses = threading.Event()
-        suppressed_code = {'value': ''}
+        suppressed_code = {'value': '', 'reason': 'Processing Code rule'}
         sequence_number = None
         try:
             sequence = self.on_request_accepted() if self.on_request_accepted else None
@@ -150,6 +150,7 @@ class ProxyRuntime:
                 sequence_number, block_response = sequence
                 if block_response:
                     suppress_responses.set()
+                    suppressed_code['reason'] = 'Request Sequence No Response fault'
                     self._emit_event('SEQUENCE_BLOCKED', info, detail=f'Request #{sequence_number} selected for No Response; request will be forwarded and host response suppressed', mti='TLS' if is_tls else '')
                 else:
                     self._emit_event('SEQUENCE_REQUEST', info, detail=f'Request #{sequence_number} allowed', mti='TLS' if is_tls else '')
@@ -247,7 +248,7 @@ class ProxyRuntime:
                         self._emit_event('RAW_RESPONSE', info, suppressed_code['value'], self._raw_hex_detail(chunk))
                     if suppress_responses.is_set():
                         self._emit_event('RESPONSE', info, suppressed_code['value'], 'Server response received')
-                        self._emit_event('DROPPED', info, suppressed_code['value'], 'Server response suppressed by Processing Code rule')
+                        self._emit_event('DROPPED', info, suppressed_code['value'], f'Server response suppressed by {suppressed_code["reason"]}')
                         continue
 
                 if direction == 'client' and self.raw_hex_logging and not is_tls:
