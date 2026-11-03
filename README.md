@@ -8,7 +8,7 @@ A portable-first Windows tool for testing plain TCP and TLS passthrough connecti
 - Multiple independent endpoint profiles with separate upstream endpoints and listener ports.
 - Live directional latency, jitter, bandwidth throttling and response/request forwarding pause.
 - Plain-TCP ISO8583 request inspection using the configured 2-byte packed-BCD length, 5-byte TPDU, MTI and primary bitmap; extracts DE 3 only.
-- Per-profile Processing Code Rules (DE 3) for Plain TCP. Each six-digit code can use No Action (normal forwarding), Block (forward request but suppress its response), or Alter Response (replace the server's complete ISO8583 response frame with a configured HEX frame).
+- Per-profile Processing Code Rules (DE 3) for Plain TCP. Each six-digit code can use No Action (normal forwarding), Block (do not forward the matching request; the POS receives no response), or Alter Response (replace the server's complete ISO8583 response frame with a configured HEX frame).
 - Custom response HEX is validated as a complete length-prefixed ISO8583 frame before profile settings are saved. TLS passthrough remains opaque and does not support DE 3 rules.
 - Live metadata-only Request / Response / Dropped / Parse-error event log with filtering and clear controls; no payment payloads are logged.
 - Best-effort active connection abort.
