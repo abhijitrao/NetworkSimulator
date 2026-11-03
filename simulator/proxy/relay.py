@@ -319,16 +319,17 @@ class ProxyRuntime:
                                 rule = self.profile.processing_code_rules.get(code or '') if self.profile.processing_rules_enabled else None
                                 if rule:
                                     action = rule.get('action', 'block')
-                                    with response_rule_lock:
-                                        response_rule_queue.append({"action": action, "response_hex": rule.get("response_hex", ""), "code": code})
-                                    suppressed_code['value'] = code
                                     if action == 'block':
-                                        suppress_responses.set()
-                                        suppressed_code['reason'] = 'Processing Code Block rule'
-                                        self._emit_event('MATCHED', info, code, 'Request forwarded; server response will be blocked')
-                                    elif action == 'alter_response':
+                                        self._emit_event('MATCHED', info, code, 'Block rule matched; request will not be forwarded to the host')
+                                        self._emit_event('DROPPED', info, code, 'Request blocked by Processing Code rule')
+                                        continue
+                                    if action == 'alter_response':
+                                        with response_rule_lock:
+                                            response_rule_queue.append({"action": action, "response_hex": rule.get("response_hex", ""), "code": code})
                                         self._emit_event('MATCHED', info, code, 'Request forwarded; server response will be replaced')
                                     else:
+                                        with response_rule_lock:
+                                            response_rule_queue.append(None)
                                         self._emit_event('MATCHED', info, code, 'No Action; request and server response will be forwarded')
                                 else:
                                     with response_rule_lock:
