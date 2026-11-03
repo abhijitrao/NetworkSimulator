@@ -121,5 +121,40 @@ class ProcessingCodeProxyTests(unittest.TestCase):
         self.assertTrue(any(e["type"] == "DROPPED" and e["processing_code"] == "960321" for e in self.events))
 
 
+    def test_global_request_sequence_blocks_selected_connection_responses(self):
+        self.manager.configure_request_sequence_fault(True, [2, 3, 5])
+
+        # Request 1 is forwarded and its echo response reaches the POS.
+        with socket.create_connection(("127.0.0.1", self.profile.listen_port), timeout=2) as first:
+            first.settimeout(2)
+            first.sendall(SAMPLE)
+            self.assertEqual(first.recv(len(SAMPLE)), SAMPLE)
+        self.assertEqual(self.manager.request_sequence_status()["counter"], 1)
+
+        # Request 2 is still forwarded to the host, but its response is not returned.
+        RecordingEchoHandler.received_event.clear()
+        with socket.create_connection(("127.0.0.1", self.profile.listen_port), timeout=2) as second:
+            second.settimeout(0.4)
+            second.sendall(SAMPLE)
+            self.assertTrue(RecordingEchoHandler.received_event.wait(1))
+            with self.assertRaises(socket.timeout):
+                second.recv(4096)
+
+        self.assertEqual(len(RecordingEchoHandler.received), 2)
+        self.assertEqual(self.manager.request_sequence_status()["counter"], 2)
+        self.assertTrue(any(e["type"] == "SEQUENCE_BLOCKED" and "Request #2" in e["detail"] for e in self.events))
+
+    def test_sequence_reset_and_order_change_restart_counter(self):
+        self.manager.configure_request_sequence_fault(True, [2, 3, 5])
+        self.assertEqual(self.manager._on_request_accepted(), (1, False))
+        self.assertEqual(self.manager._on_request_accepted(), (2, True))
+        self.assertEqual(self.manager.reset_request_sequence_fault()["counter"], 0)
+        self.assertEqual(self.manager._on_request_accepted(), (1, False))
+        status = self.manager.configure_request_sequence_fault(True, [4])
+        self.assertEqual(status["counter"], 0)
+        self.assertEqual(self.manager._on_request_accepted(), (1, False))
+        self.assertEqual(self.manager.configure_request_sequence_fault(False, [4])["counter"], 0)
+        self.assertIsNone(self.manager._on_request_accepted())
+
 if __name__ == "__main__":
     unittest.main()
