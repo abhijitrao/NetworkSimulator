@@ -135,6 +135,8 @@ class ProxyRuntime:
         info = ConnectionInfo(connection_id, f"{address[0]}:{address[1]}", time.time())
         upstream: socket.socket | None = None
         connected = False
+        is_tls = self.profile.transport_label == 'tls_passthrough'
+        connected = False
         with self._lock:
             self._connections[connection_id] = info
             self._sockets[connection_id] = {client}
@@ -156,7 +158,9 @@ class ProxyRuntime:
             if self._stopping.is_set():
                 return
             connected = True
+            connected = True
             LOG.info("[%s] Connected client %s", connection_id, info.client_address)
+            self._emit_event('CONNECTED', info, detail='TLS passthrough tunnel connected' if is_tls else 'TCP connection established', mti='TLS' if is_tls else '')
             self._emit_event(
                 'CONNECTED', info,
                 detail='TLS passthrough tunnel connected' if is_tls else 'TCP connection established',
@@ -175,6 +179,7 @@ class ProxyRuntime:
         except (OSError, TimeoutError) as exc:
             LOG.warning("[%s] Connection failed: %s", connection_id, exc)
             self._emit_event('CONNECTION_ERROR', info, detail=f'Upstream connection failed: {exc}', mti='TLS' if is_tls else '')
+            self._emit_event('CONNECTION_ERROR', info, detail=f'Upstream connection failed: {exc}', mti='TLS' if is_tls else '')
         finally:
             for sock in (client, upstream):
                 if sock:
@@ -185,6 +190,8 @@ class ProxyRuntime:
                     detail=f'Connection closed; POS → Server {info.bytes_from_client} B, Server → POS {info.bytes_from_upstream} B',
                     mti='TLS' if is_tls else '',
                 )
+            if connected:
+                self._emit_event('DISCONNECTED', info, detail=f'Connection closed; POS → Server {info.bytes_from_client} B, Server → POS {info.bytes_from_upstream} B', mti='TLS' if is_tls else '')
             with self._lock:
                 self._connections.pop(connection_id, None)
                 self._sockets.pop(connection_id, None)
@@ -214,9 +221,16 @@ class ProxyRuntime:
         suffix = f'... [truncated; {len(chunk)} bytes total]' if len(chunk) > 4096 else ''
         return f'HEX chunk ({len(chunk)} bytes): {preview}{suffix}'
 
+    @staticmethod
+    def _raw_hex_detail(chunk: bytes) -> str:
+        preview = chunk[:4096].hex().upper()
+        suffix = f'... [truncated; {len(chunk)} bytes total]' if len(chunk) > 4096 else ''
+        return f'HEX chunk ({len(chunk)} bytes): {preview}{suffix}'
+
     def _pump(self, source: socket.socket, destination: socket.socket, info: ConnectionInfo, direction: str, suppress_responses: threading.Event, suppressed_code: dict) -> None:
         counter = "bytes_from_client" if direction == "client" else "bytes_from_upstream"
         framer = Iso8583StreamFramer() if self.profile.transport_label == 'tcp' else None
+        is_tls = self.profile.transport_label == 'tls_passthrough'
         is_tls = self.profile.transport_label == 'tls_passthrough'
         try:
             while not self._stopping.is_set():
