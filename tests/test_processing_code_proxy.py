@@ -128,10 +128,9 @@ class ProcessingCodeProxyTests(unittest.TestCase):
         with socket.create_connection(("127.0.0.1", self.profile.listen_port), timeout=2) as client:
             client.settimeout(0.4)
             client.sendall(SAMPLE)
-            self.assertTrue(RecordingEchoHandler.received_event.wait(1))
-            self.assertEqual(RecordingEchoHandler.received[0], SAMPLE)
             with self.assertRaises(socket.timeout):
                 client.recv(4096)
+        self.assertFalse(RecordingEchoHandler.received_event.wait(0.2))
         self.assertTrue(any(e["type"] == "DROPPED" and e["processing_code"] == "960321" for e in self.events))
 
     def test_alter_response_rule_replaces_server_frame(self):
