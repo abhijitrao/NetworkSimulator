@@ -201,6 +201,48 @@ def create_app(config_path: str | Path = CONFIG_PATH, manager: ProxyManager | No
             pass
         return jsonify(ok=True, processing_codes=codes, enabled=profile.processing_rules_enabled, apply_to=apply_to)
 
+    @app.post("/api/profiles/<profile_id>/processing-code-rules")
+    def set_processing_code_rules(profile_id: str):
+        payload = request.get_json(force=True) or {}
+        raw_rules = payload.get("rules", [])
+        enabled = payload.get("enabled", True)
+        if not isinstance(raw_rules, list) or not isinstance(enabled, bool):
+            return jsonify(error="rules must be an array and enabled must be a boolean"), 400
+        rules = {}
+        for item in raw_rules:
+            if not isinstance(item, dict):
+                return jsonify(error="Each rule must be an object"), 400
+            code = str(item.get("processing_code", "")).strip()
+            action = str(item.get("action", "block"))
+            response_hex = "".join(str(item.get("response_hex", "")).split()).upper()
+            if len(code) != 6 or not code.isdigit():
+                return jsonify(error="Each Processing Code must contain exactly 6 digits"), 400
+            if action not in {"none", "block", "alter_response"}:
+                return jsonify(error="Action must be none, block or alter_response"), 400
+            if code in rules:
+                return jsonify(error=f"Duplicate Processing Code rule: {code}"), 400
+            if action == "alter_response" and (not response_hex or len(response_hex) % 2 or any(ch not in "0123456789ABCDEF" for ch in response_hex)):
+                return jsonify(error=f"Processing Code {code}: response must be valid, even-length HEX"), 400
+            rules[code] = {"action": action, "response_hex": response_hex if action == "alter_response" else ""}
+        with state_lock:
+            items = profiles()
+            profile = find_profile(profile_id, items)
+            if profile.transport_label != "tcp" and rules:
+                return jsonify(error="Processing Code response rules are supported only for Plain TCP profiles"), 400
+            profile.processing_code_rules = rules
+            profile.processing_codes = list(rules)
+            profile.processing_rules_enabled = enabled
+            try:
+                profile.validate()
+            except ValueError as exc:
+                return jsonify(error=str(exc)), 400
+            store.save(items)
+        try:
+            proxy_manager.set_processing_code_rules(profile_id, rules, enabled)
+        except ValueError:
+            pass  # Stopped profiles use persisted rules on their next start.
+        return jsonify(ok=True, enabled=enabled, rules=rules)
+
     @app.post("/api/profiles/<profile_id>/request-sequence-fault")
     def set_request_sequence_fault(profile_id: str):
         payload = request.get_json(force=True) or {}

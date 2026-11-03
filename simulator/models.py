@@ -48,6 +48,7 @@ class ProxyProfile:
     notes: str = ""
     processing_codes: list[str] = field(default_factory=list)
     processing_rules_enabled: bool = True
+    processing_code_rules: dict[str, dict[str, str]] = field(default_factory=dict)
     raw_hex_logging: bool = False
     request_sequence_enabled: bool = False
     request_sequence_orders: list[int] = field(default_factory=list)
@@ -68,6 +69,7 @@ class ProxyProfile:
             notes=str(value.get("notes", "")),
             processing_codes=[str(code).strip() for code in value.get("processing_codes", []) if str(code).strip()],
             processing_rules_enabled=bool(value.get("processing_rules_enabled", True)),
+            processing_code_rules={str(code).strip(): {str(k): str(v) for k, v in rule.items()} for code, rule in (value.get("processing_code_rules") or {}).items() if isinstance(rule, dict)},
             raw_hex_logging=bool(value.get("raw_hex_logging", False)),
             request_sequence_enabled=bool(value.get("request_sequence_enabled", False)),
             request_sequence_orders=sorted(set(int(order) for order in value.get("request_sequence_orders", []))),
@@ -85,7 +87,7 @@ class ProxyProfile:
             raise ValueError("transport_label must be 'tcp' or 'tls_passthrough'")
         if not 100 <= self.connect_timeout_ms <= 300000:
             raise ValueError("connect_timeout_ms must be between 100 and 300000")
-        if self.transport_label == "tls_passthrough" and self.processing_codes:
+        if self.transport_label == "tls_passthrough" and (self.processing_codes or self.processing_code_rules):
             raise ValueError("Processing Code rules are supported only for Plain TCP profiles")
         if any(order < 1 for order in self.request_sequence_orders):
             raise ValueError("Request sequence numbers must be greater than zero")
@@ -93,6 +95,28 @@ class ProxyProfile:
         if any(len(code) != 6 or not code.isdigit() for code in self.processing_codes):
             raise ValueError("Processing Codes must contain exactly 6 digits")
         self.processing_codes = list(dict.fromkeys(self.processing_codes))
+        normalized_rules = {}
+        for code, rule in self.processing_code_rules.items():
+            action = rule.get("action", "block")
+            response_hex = "".join(rule.get("response_hex", "").split()).upper()
+            if len(code) != 6 or not code.isdigit():
+                raise ValueError("Each Processing Code rule must contain exactly 6 digits")
+            if action not in {"none", "block", "alter_response"}:
+                raise ValueError("Processing Code action must be none, block or alter_response")
+            if action == "alter_response":
+                if not response_hex or len(response_hex) % 2 or any(ch not in "0123456789ABCDEF" for ch in response_hex):
+                    raise ValueError(f"Processing Code {code}: response must be valid, even-length HEX")
+                response = bytes.fromhex(response_hex)
+                if len(response) < 17:
+                    raise ValueError(f"Processing Code {code}: response must be a complete ISO8583 frame")
+                from .proxy.iso8583 import decode_bcd_length, extract_mti
+                if decode_bcd_length(response[:2]) != len(response) - 2:
+                    raise ValueError(f"Processing Code {code}: response frame length does not match HEX payload")
+                extract_mti(response)
+            normalized_rules[code] = {"action": action, "response_hex": response_hex if action == "alter_response" else ""}
+        self.processing_code_rules = normalized_rules
+        if normalized_rules:
+            self.processing_codes = list(normalized_rules)
         self.fault_profile.validate()
 
     def to_dict(self) -> dict[str, Any]:

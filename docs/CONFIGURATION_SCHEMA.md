@@ -27,6 +27,16 @@ The simulator supports multiple independent endpoint profiles. A profile maps on
 - Persist updates atomically and preserve existing profiles when an import is merged.
 - Provide an explicit replace-import mode with a confirmation step in the UI.
 
+## Processing Code Rules (Plain TCP only)
+
+- `processing_code_rules` is a profile-scoped object keyed by the exact six-digit DE 3 value.
+- Each rule has `action`: `none`, `block`, or `alter_response`.
+- `none` forwards the original request and response.
+- `block` does not forward the matching request to the upstream host. The POS receives no response and can reach its configured read timeout.
+- `alter_response` forwards the request, then replaces the corresponding complete server response frame with `response_hex`.
+- `response_hex` must be an even-length HEX string containing a complete two-byte-length-prefixed ISO8583 frame. The declared frame length and MTI are validated before saving.
+- Rules are persisted independently per profile. They are unavailable for TLS passthrough because TLS payloads remain encrypted and opaque.
+
 ## Fault settings
 
 Faults are scoped to a profile and independently applied to POS-to-upstream and upstream-to-POS directions:

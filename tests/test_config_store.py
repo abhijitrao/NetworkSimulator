@@ -20,6 +20,37 @@ class ProfileStoreTests(unittest.TestCase):
             self.assertEqual([p.id for p in loaded], ["one", "two"])
             self.assertEqual(loaded[1].transport_label, "tls_passthrough")
 
+    def test_processing_code_rules_round_trip(self):
+        profile = ProxyProfile.from_dict({
+            "id": "rules",
+            "name": "Rule profile",
+            "processing_code_rules": {
+                "000000": {"action": "none", "response_hex": ""},
+            },
+        })
+        self.assertEqual(profile.to_dict()["processing_code_rules"]["000000"]["action"], "none")
+
+    def test_rejects_processing_code_rules_on_tls_profile(self):
+        with self.assertRaisesRegex(ValueError, "Plain TCP"):
+            ProxyProfile.from_dict({
+                "id": "tls-rules",
+                "name": "TLS rules",
+                "transport_label": "tls_passthrough",
+                "processing_code_rules": {
+                    "000000": {"action": "block", "response_hex": ""},
+                },
+            })
+
+    def test_rejects_alter_response_with_mismatched_frame_length(self):
+        with self.assertRaisesRegex(ValueError, "frame length"):
+            ProxyProfile.from_dict({
+                "id": "bad-response",
+                "name": "Bad response",
+                "processing_code_rules": {
+                    "000000": {"action": "alter_response", "response_hex": "000F600090000108000000000000000000000000"},
+                },
+            })
+
     def test_rejects_duplicate_listener_port(self):
         profiles = [
             ProxyProfile(id="one", name="Wildcard", bind_host="0.0.0.0", listen_port=8666),
