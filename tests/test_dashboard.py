@@ -103,11 +103,17 @@ class DashboardTests(unittest.TestCase):
         self.assertLess(content.index("RAW_RESPONSE"), content.index("DISCONNECTED"))
         self.assertIn("HEX chunk AABB second line value", content)
         raw = response.data
-        self.assertIn(b"\n", raw)
-        self.assertIn(b"\t", raw)
         self.assertNotIn(b"\\n", raw)
-        self.assertNotIn(b"\\t", raw)
         self.assertEqual(len(raw.splitlines()), 9)
+        self.assertNotIn(bytes([9]), raw)
+        self.assertIn("  ".join(["TIMESTAMP".ljust(23), "EVENT".ljust(14), "PROFILE".ljust(18), "MTI".ljust(8), "PROCESSING CODE".ljust(16)]), content)
+        self.assertNotIn("CONNECTION ID", content)
+        self.assertNotIn("c1", content)
+        self.assertNotIn("c2", content)
+        header = content.splitlines()[4]
+        self.assertEqual(header.index("EVENT"), 25)
+        self.assertIn("MTI", content)
+        self.assertNotIn("MTI / TRANSPORT", content)
 
     def test_reject_remote_client(self):
         response = self.client.get("/api/state", environ_overrides={"REMOTE_ADDR": "192.0.2.1"})

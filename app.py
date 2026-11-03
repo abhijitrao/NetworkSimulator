@@ -226,31 +226,44 @@ def create_app(config_path: str | Path = CONFIG_PATH, manager: ProxyManager | No
     def export_events():
         with event_lock:
             events = sorted(event_log, key=lambda item: item.get("timestamp", 0))
+
+        from datetime import datetime
+        from textwrap import wrap
+
+        # Fixed-width columns keep the TXT file aligned in monospaced editors.
+        widths = (23, 14, 18, 8, 16)
+        headers = ("TIMESTAMP", "EVENT", "PROFILE", "MTI", "PROCESSING CODE")
+        detail_width = 120
+        separator = "-" * (sum(widths) + len(widths) * 2 + detail_width)
+
+        def format_row(values: tuple[str, ...]) -> str:
+            return "  ".join(value[:width].ljust(width) for value, width in zip(values, widths))
+
         lines = [
             "POS Network Simulator - Traffic Event Log",
             f"Total events: {len(events)}",
             "Order: Oldest first, newest last",
-            "-" * 120,
-            "TIMESTAMP\tEVENT\tPROFILE\tMTI / TRANSPORT\tPROCESSING CODE\tCONNECTION ID\tDETAILS",
-            "-" * 120,
+            separator,
+            format_row(headers) + "  DETAILS",
+            separator,
         ]
-        from datetime import datetime
+
         for item in events:
             timestamp = datetime.fromtimestamp(item.get("timestamp", 0)).astimezone().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-            values = [
+            values = (
                 timestamp,
                 str(item.get("type", "")),
                 str(item.get("profile", "")),
                 str(item.get("mti", "") or "-"),
                 str(item.get("processing_code", "") or "-"),
-                str(item.get("connection_id", "") or "-"),
-                str(item.get("detail", "")).replace("\r", " ").replace("\n", " ").replace("\t", " "),
-            ]
-            lines.append("\t".join(values))
+            )
+            detail = str(item.get("detail", "")).replace("\r", " ").replace("\n", " ").replace("\t", " ")
+            lines.append(format_row(values) + "  " + detail)
+
         body = "\n".join(lines) + "\n"
         return Response(
             body,
-            mimetype="text/plain",
+            mimetype="text/plain; charset=utf-8",
             headers={"Content-Disposition": 'attachment; filename="pos-traffic-logs.txt"'},
         )
 
