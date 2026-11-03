@@ -326,8 +326,10 @@ class ProxyRuntime:
                                         suppress_responses.set()
                                         suppressed_code['reason'] = 'Processing Code Block rule'
                                         self._emit_event('MATCHED', info, code, 'Request forwarded; server response will be blocked')
-                                    else:
+                                    elif action == 'alter_response':
                                         self._emit_event('MATCHED', info, code, 'Request forwarded; server response will be replaced')
+                                    else:
+                                        self._emit_event('MATCHED', info, code, 'No Action; request and server response will be forwarded')
                                 else:
                                     with response_rule_lock:
                                         response_rule_queue.append(None)
