@@ -111,7 +111,8 @@ class DashboardTests(unittest.TestCase):
         self.assertNotIn("CONNECTION ID", content)
         self.assertNotIn("c1", content)
         self.assertNotIn("c2", content)
-        self.assertIn("TIMESTAMP              EVENT", content)
+        header = content.splitlines()[4]
+        self.assertEqual(header.index("EVENT"), 25)
         self.assertIn("MTI", content)
         self.assertNotIn("MTI / TRANSPORT", content)
 
