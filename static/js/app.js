@@ -24,8 +24,22 @@ function esc(value) {
 }
 function runtimeOf(profile) { return profile.runtime || {running:false,active_connections:0,connections:[]}; }
 
+function activeFaultPreset(fault = {}) {
+  const latency = Number(fault.latency_ms) || 0;
+  const jitter = Number(fault.jitter_ms) || 0;
+  const bandwidth = Number(fault.bandwidth_bytes_per_second) || 0;
+  const pauseClient = !!fault.pause_client_to_upstream;
+  const pauseServer = !!fault.pause_upstream_to_client;
+  if (latency === 0 && jitter === 0 && bandwidth === 0 && !pauseClient && !pauseServer) return 'normal';
+  if (latency === 30000 && jitter === 0 && bandwidth === 0 && !pauseClient && !pauseServer) return 'slow';
+  if (latency === 55000 && jitter === 0 && bandwidth === 0 && !pauseClient && !pauseServer) return 'very-slow';
+  if (latency === 300 && jitter === 250 && bandwidth === 0 && !pauseClient && !pauseServer) return 'unstable';
+  if (latency === 0 && jitter === 0 && bandwidth === 0 && (pauseClient || pauseServer)) return 'no-response';
+  return 'custom';
+}
+
 function profileCard(p) {
-  const rt = runtimeOf(p), running = !!rt.running, fault = p.fault_profile || {};
+  const rt = runtimeOf(p), running = !!rt.running, fault = p.fault_profile || {}, activeFault = activeFaultPreset(fault);
   let html = '<article class="profile-card" data-id="' + esc(p.id) + '">';
   html += '<div class="card-top"><div><h3 class="profile-name">' + esc(p.name) + '</h3><p class="endpoint">' + esc(p.upstream_host) + ':' + p.upstream_port + '</p></div>';
   html += '<span class="status ' + (running ? 'running' : '') + '">' + (running ? '● Running' : '○ Stopped') + '</span></div>';
@@ -56,11 +70,11 @@ function profileCard(p) {
   const pauseEnabled = fault.apply_to === 'response' ? fault.pause_upstream_to_client : fault.apply_to === 'both' ? (fault.pause_client_to_upstream || fault.pause_upstream_to_client) : fault.pause_client_to_upstream;
   html += faultCheck('Pause traffic', 'pause_enabled', pauseEnabled);
   html += '</div><div class="apply-row"><button class="small-btn" data-action="normal" data-id="' + esc(p.id) + '">Normal</button>';
-  html += '<button class="small-btn" data-action="preset" data-preset="slow" data-id="' + esc(p.id) + '"' + (running ? '' : ' disabled') + '>Slow 30s</button>';
-  html += '<button class="small-btn" data-action="preset" data-preset="very-slow" data-id="' + esc(p.id) + '"' + (running ? '' : ' disabled') + '>Very slow 55s</button>';
-  html += '<button class="small-btn" data-action="preset" data-preset="unstable" data-id="' + esc(p.id) + '"' + (running ? '' : ' disabled') + '>Unstable</button>';
-  html += '<button class="small-btn" data-action="preset" data-preset="no-response" data-id="' + esc(p.id) + '"' + (running ? '' : ' disabled') + '>No response</button>';
-  html += '<button class="small-btn go" data-action="apply-fault" data-id="' + esc(p.id) + '"' + (running ? '' : ' disabled title="Start proxy first"') + '>Apply custom</button></div></div>';
+  html += '<button class="small-btn ' + (activeFault === 'slow' ? 'active' : '') + '" data-action="preset" data-preset="slow" data-id="' + esc(p.id) + '"' + (running ? '' : ' disabled') + '>Slow 30s</button>';
+  html += '<button class="small-btn ' + (activeFault === 'very-slow' ? 'active' : '') + '" data-action="preset" data-preset="very-slow" data-id="' + esc(p.id) + '"' + (running ? '' : ' disabled') + '>Very slow 55s</button>';
+  html += '<button class="small-btn ' + (activeFault === 'unstable' ? 'active' : '') + '" data-action="preset" data-preset="unstable" data-id="' + esc(p.id) + '"' + (running ? '' : ' disabled') + '>Unstable</button>';
+  html += '<button class="small-btn ' + (activeFault === 'no-response' ? 'active' : '') + '" data-action="preset" data-preset="no-response" data-id="' + esc(p.id) + '"' + (running ? '' : ' disabled') + '>No response</button>';
+  html += '<button class="small-btn go ' + (activeFault === 'custom' ? 'active' : '') + '" data-action="apply-fault" data-id="' + esc(p.id) + '"' + (running ? '' : ' disabled title="Start proxy first"') + '>Apply custom</button></div></div>';
   if (rt.connections && rt.connections.length) {
     html += '<div class="fault-panel"><div class="fault-title">ACTIVE CONNECTIONS</div>';
     rt.connections.forEach(c => { html += '<div class="endpoint">' + esc(c.client) + ' · POS → Server ' + c.bytes_from_client + ' B · Server → POS ' + c.bytes_from_upstream + ' B</div>'; });
