@@ -151,7 +151,7 @@ class ProcessingCodeProxyTests(unittest.TestCase):
                 second.recv(4096)
 
         self.assertEqual(len(RecordingEchoHandler.received), 2)
-        self.assertEqual(self.manager.request_sequence_status()["counter"], 2)
+        self.assertEqual(self.manager.request_sequence_status(self.profile.id)["counter"], 2)
         self.assertTrue(any(e["type"] == "SEQUENCE_BLOCKED" and "Request #2" in e["detail"] for e in self.events))
 
     def test_sequence_reset_and_order_change_restart_counter(self):
