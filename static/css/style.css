@@ -106,3 +106,9 @@ body.event-fullscreen-open{overflow:hidden}
 #featureValues{display:block;width:100%;resize:vertical;min-height:76px;background:#0c1424;color:#eef4ff;border:1px solid #33435e;border-radius:8px;padding:10px;font:12px Consolas,monospace}
 #featureDialog .dialog-head{margin-bottom:16px}
 #featureDialog .dialog-actions{margin-top:18px}
+
+/* Keep sequence details compact and avoid a doubled divider before fault injection. */
+.sequence-summary{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.sequence-summary span{white-space:nowrap}
+.profile-feature-pair+.fault-panel{border-top:0}
+@media(max-width:560px){.sequence-summary{align-items:flex-start;flex-direction:column;gap:5px}.sequence-summary span{white-space:normal}}
