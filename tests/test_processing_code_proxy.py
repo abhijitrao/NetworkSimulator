@@ -159,12 +159,12 @@ class ProcessingCodeProxyTests(unittest.TestCase):
         self.assertEqual(self.manager._on_request_accepted(self.profile.id), (1, False))
         self.assertEqual(self.manager._on_request_accepted(self.profile.id), (2, True))
         self.assertEqual(self.manager.reset_request_sequence_fault()["counter"], 0)
-        self.assertEqual(self.manager._on_request_accepted(), (1, False))
+        self.assertEqual(self.manager._on_request_accepted(self.profile.id), (1, False))
         status = self.manager.configure_request_sequence_fault(self.profile.id, True, [4])
         self.assertEqual(status["counter"], 0)
-        self.assertEqual(self.manager._on_request_accepted(), (1, False))
+        self.assertEqual(self.manager._on_request_accepted(self.profile.id), (1, False))
         self.assertEqual(self.manager.configure_request_sequence_fault(self.profile.id, False, [4])["counter"], 0)
-        self.assertIsNone(self.manager._on_request_accepted())
+        self.assertIsNone(self.manager._on_request_accepted(self.profile.id))
 
     def test_sequence_counters_are_independent_per_profile(self):
         second_id = str(uuid.uuid4())
