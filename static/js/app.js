@@ -3,6 +3,22 @@ let state = [];
 let toastTimer;
 let networkInterfaces = [];
 let selectedNetworkIp = '';
+const dialogScrollPositions = new WeakMap();
+
+function showDashboardDialog(dialog) {
+  dialogScrollPositions.set(dialog, window.scrollY);
+  dialog.showModal();
+}
+
+function restoreDashboardAfterDialog(dialog) {
+  const scrollTop = dialogScrollPositions.get(dialog);
+  requestAnimationFrame(() => {
+    // The profile list may have been refreshed while the dialog was open, so
+    // return focus to a stable dashboard control rather than a removed card button.
+    $('refreshBtn').focus({preventScroll:true});
+    if (Number.isFinite(scrollTop)) window.scrollTo(0, scrollTop);
+  });
+}
 
 function toast(message) {
   const el = $('toast');
@@ -239,7 +255,7 @@ function openDialog(profile = null) {
   $('notes').value = profile?.notes || '';
   $('enabled').checked = profile?.enabled ?? true;
   $('rawHexLogging').checked = profile?.raw_hex_logging ?? false;
-  $('profileDialog').showModal();
+  showDashboardDialog($('profileDialog'));
 }
 
 function formPayload(id) {
@@ -263,7 +279,15 @@ $('profileForm').addEventListener('submit', async (event) => {
     const id = $('profileId').value, payload = formPayload(id);
     await api(id ? '/api/profiles/' + encodeURIComponent(id) : '/api/profiles',
       {method:id ? 'PUT' : 'POST',body:JSON.stringify(payload)});
-    $('profileDialog').close(); await refresh(); toast('Profile saved');
+    $('profileDialog').close();
+    await refresh();
+    if (id && confirm('Profile saved successfully. Do you want to start the Proxy now?')) {
+      await api('/api/profiles/' + encodeURIComponent(id) + '/start', {method:'POST',body:'{}'});
+      await refresh();
+      toast('Profile saved and Proxy started');
+    } else {
+      toast(id ? 'Profile saved. Proxy was not started' : 'Profile saved');
+    }
   } catch(e) { toast(e.message); }
 });
 
@@ -375,7 +399,7 @@ function openFeatureDialog(type, profile) {
     $('featureValues').value = (sequence.orders || []).join(', ');
     $('featureValues').placeholder = '2, 3, 5';
   }
-  $('featureDialog').showModal();
+  showDashboardDialog($('featureDialog'));
 }
 $('addProcessingRule').addEventListener('click', () => addProcessingRuleRow());
 $('featureForm').addEventListener('submit', async event => {
@@ -409,6 +433,8 @@ $('featureForm').addEventListener('submit', async event => {
 $('closeFeatureDialog').addEventListener('click', () => $('featureDialog').close());
 $('cancelFeatureDialog').addEventListener('click', () => $('featureDialog').close());
 
+$('profileDialog').addEventListener('close', () => restoreDashboardAfterDialog($('profileDialog')));
+$('featureDialog').addEventListener('close', () => restoreDashboardAfterDialog($('featureDialog')));
 $('addProfileBtn').addEventListener('click', () => openDialog());
 $('closeDialog').addEventListener('click', () => $('profileDialog').close());
 $('cancelDialog').addEventListener('click', () => $('profileDialog').close());
