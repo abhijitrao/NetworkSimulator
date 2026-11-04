@@ -145,8 +145,8 @@ body.event-fullscreen-open{overflow:hidden}
 .event-log{position:relative;scroll-behavior:auto;overscroll-behavior:contain}
 .latest-events-btn{
   position:absolute;
-  right:64px;
-  bottom:24px;
+  right:32px;
+  bottom:16px;
   z-index:5;
   width:44px;
   height:44px;
@@ -178,6 +178,6 @@ body.event-fullscreen-open{overflow:hidden}
 }
 .event-panel.event-panel-fullscreen .latest-events-btn{
   position:absolute;
-  right:68px;
-  bottom:28px;
+  right:32px;
+  bottom:16px;
 }
