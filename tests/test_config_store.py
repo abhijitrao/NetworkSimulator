@@ -20,6 +20,16 @@ class ProfileStoreTests(unittest.TestCase):
             self.assertEqual([p.id for p in loaded], ["one", "two"])
             self.assertEqual(loaded[1].transport_label, "tls_passthrough")
 
+    def test_request_sequence_reset_on_end_round_trip(self):
+        profile = ProxyProfile.from_dict({
+            "id": "sequence-reset", "name": "Sequence reset",
+            "request_sequence_enabled": True,
+            "request_sequence_orders": [2, 3, 5],
+            "request_sequence_reset_on_end": True,
+        })
+        self.assertTrue(profile.to_dict()["request_sequence_reset_on_end"])
+        self.assertEqual(profile.request_sequence_orders, [2, 3, 5])
+
     def test_processing_code_rules_round_trip(self):
         profile = ProxyProfile.from_dict({
             "id": "rules",
