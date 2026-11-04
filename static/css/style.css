@@ -184,8 +184,9 @@ body.event-fullscreen-open{overflow:hidden}
 
 /* Make incoming traffic visible without interrupting manual log browsing. */
 @keyframes event-row-arrive{
-  0%{background:#245b78;box-shadow:inset 3px 0 0 #70c9ff}
-  100%{background:transparent;box-shadow:inset 0 0 0 transparent}
+  0%{opacity:0;transform:translateY(8px);background:#245b78;box-shadow:inset 3px 0 0 #70c9ff}
+  65%{opacity:1;background:#17364a;box-shadow:inset 3px 0 0 #70c9ff}
+  100%{opacity:1;transform:translateY(0);background:transparent;box-shadow:inset 0 0 0 transparent}
 }
 .event-row.event-row-new{animation:event-row-arrive 1.25s ease-out both}
 .latest-events-btn.has-new-events{animation:latest-events-pulse 1.6s ease-in-out infinite}
