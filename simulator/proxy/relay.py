@@ -280,7 +280,14 @@ class ProxyRuntime:
                                     self._emit_event('PARSE_ERROR', info, detail=str(exc))
                                     code, mti = '', ''
                                 self._emit_event('RESPONSE', info, code, 'Server response received', mti)
-                            if self.profile.processing_rules_enabled and self.profile.processing_code_rules:
+                            has_alter_response_rule = (
+                                self.profile.processing_rules_enabled
+                                and any(
+                                    rule.get('action') == 'alter_response'
+                                    for rule in self.profile.processing_code_rules.values()
+                                )
+                            )
+                            if has_alter_response_rule:
                                 outgoing_chunks = []
                                 for frame in frames:
                                     with response_rule_lock:
@@ -292,6 +299,11 @@ class ProxyRuntime:
                                                          f'Original server response replaced with configured HEX ({len(replacement)} bytes)', mti)
                                     else:
                                         outgoing_chunks.append(frame)
+                            else:
+                                # Block and No Action rules must not buffer or rebuild host
+                                # responses. Forward each original TCP chunk unchanged,
+                                # including chunks that contain only a partial ISO8583 frame.
+                                outgoing_chunks = [chunk]
                         # With no suppression rules, inspect complete request frames
                         # for metadata but forward every original TCP chunk immediately.
                         elif not self.profile.processing_rules_enabled or not self.profile.processing_codes:
