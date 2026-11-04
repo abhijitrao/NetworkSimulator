@@ -32,6 +32,7 @@ class ProxyManager:
             self._sequence_settings.setdefault(profile.id, {
                 "enabled": profile.request_sequence_enabled,
                 "orders": set(profile.request_sequence_orders),
+                "reset_on_end": profile.request_sequence_reset_on_end,
                 "counter": 0,
             })
             runtime = ProxyRuntime(profile, on_event=self.on_event,
@@ -53,30 +54,32 @@ class ProxyManager:
         for runtime in runtimes:
             runtime.stop()
 
-    def configure_request_sequence_fault(self, profile_id: str, enabled: bool, orders: list[int]) -> dict:
+    def configure_request_sequence_fault(self, profile_id: str, enabled: bool, orders: list[int], reset_on_end: bool = False) -> dict:
         normalized = sorted(set(int(value) for value in orders))
         if any(value < 1 for value in normalized):
             raise ValueError("Request order numbers must be greater than zero")
         with self._sequence_lock:
-            current = self._sequence_settings.setdefault(profile_id, {"enabled": False, "orders": set(), "counter": 0})
-            changed = bool(enabled) != current["enabled"] or set(normalized) != current["orders"]
+            current = self._sequence_settings.setdefault(profile_id, {"enabled": False, "orders": set(), "reset_on_end": False, "counter": 0})
+            changed = bool(enabled) != current["enabled"] or set(normalized) != current["orders"] or bool(reset_on_end) != current.get("reset_on_end", False)
             current["enabled"] = bool(enabled)
             current["orders"] = set(normalized)
+            current["reset_on_end"] = bool(reset_on_end)
             if changed:
                 current["counter"] = 0
             return self.request_sequence_status(profile_id)
 
     def reset_request_sequence_fault(self, profile_id: str) -> dict:
         with self._sequence_lock:
-            current = self._sequence_settings.setdefault(profile_id, {"enabled": False, "orders": set(), "counter": 0})
+            current = self._sequence_settings.setdefault(profile_id, {"enabled": False, "orders": set(), "reset_on_end": False, "counter": 0})
             current["counter"] = 0
             return self.request_sequence_status(profile_id)
 
     def request_sequence_status(self, profile_id: str) -> dict:
         with self._sequence_lock:
-            current = self._sequence_settings.setdefault(profile_id, {"enabled": False, "orders": set(), "counter": 0})
+            current = self._sequence_settings.setdefault(profile_id, {"enabled": False, "orders": set(), "reset_on_end": False, "counter": 0})
             return {
                 "enabled": current["enabled"],
+                "reset_on_end": current.get("reset_on_end", False),
                 "orders": sorted(current["orders"]),
                 "counter": current["counter"],
                 "next_request": current["counter"] + 1,
@@ -84,12 +87,15 @@ class ProxyManager:
 
     def _on_request_accepted(self, profile_id: str) -> tuple[int, bool] | None:
         with self._sequence_lock:
-            current = self._sequence_settings.setdefault(profile_id, {"enabled": False, "orders": set(), "counter": 0})
+            current = self._sequence_settings.setdefault(profile_id, {"enabled": False, "orders": set(), "reset_on_end": False, "counter": 0})
             if not current["enabled"]:
                 return None
             current["counter"] += 1
             number = current["counter"]
-            return number, number in current["orders"]
+            should_block = number in current["orders"]
+            if current.get("reset_on_end", False) and should_block and number == max(current["orders"], default=0):
+                current["counter"] = 0
+            return number, should_block
 
     def set_raw_hex_logging(self, enabled: bool) -> None:
         with self._lock:
