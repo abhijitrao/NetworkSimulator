@@ -176,7 +176,13 @@ function formatEventTimestamp(timestamp) {
     '.' + pad(date.getMilliseconds(), 3);
 }
 let autoScrollEvents = true;
+let seenEventKeys = null;
+let pendingNewEventCount = 0;
 const EVENT_LOG_BOTTOM_THRESHOLD = 8;
+
+function eventKey(item) {
+  return [item.timestamp, item.connection_id || '', item.type, item.mti || '', item.processing_code || '', item.detail || ''].join('|');
+}
 
 function isEventLogAtBottom(target = $('eventLog')) {
   return target.scrollHeight - target.scrollTop - target.clientHeight <= EVENT_LOG_BOTTOM_THRESHOLD;
@@ -184,19 +190,28 @@ function isEventLogAtBottom(target = $('eventLog')) {
 
 function updateLatestLogsButton() {
   const button = $('latestEventsBtn');
-  if (button) button.hidden = autoScrollEvents || isEventLogAtBottom();
+  if (!button) return;
+  const awayFromBottom = !autoScrollEvents && !isEventLogAtBottom();
+  button.hidden = !awayFromBottom;
+  button.dataset.count = pendingNewEventCount > 99 ? '99+' : String(pendingNewEventCount);
+  button.classList.toggle('has-new-events', awayFromBottom && pendingNewEventCount > 0);
+  button.setAttribute('aria-label', pendingNewEventCount
+    ? 'Scroll to latest logs, ' + pendingNewEventCount + ' new events'
+    : 'Scroll to latest logs');
 }
 
 function scrollEventsToBottom() {
   const target = $('eventLog');
   target.scrollTop = target.scrollHeight;
   autoScrollEvents = true;
+  pendingNewEventCount = 0;
   updateLatestLogsButton();
 }
 
 $('eventLog').addEventListener('scroll', () => {
   // Re-enable follow mode as soon as the user reaches the bottom again.
   autoScrollEvents = isEventLogAtBottom();
+  if (autoScrollEvents) pendingNewEventCount = 0;
   updateLatestLogsButton();
 }, {passive:true});
 
@@ -208,6 +223,13 @@ async function refreshEvents() {
   const allEvents = data.events || [];
   const metadataEvents = allEvents.filter(item => !['RAW_REQUEST', 'RAW_RESPONSE'].includes(item.type));
   const rawEvents = allEvents.filter(item => ['RAW_REQUEST', 'RAW_RESPONSE'].includes(item.type));
+
+  // On initial load, establish a baseline. Later refreshes identify newly received events.
+  const currentKeys = new Set(metadataEvents.map(eventKey));
+  const newKeys = seenEventKeys === null
+    ? new Set()
+    : new Set(metadataEvents.filter(item => !seenEventKeys.has(eventKey(item))).map(eventKey));
+  seenEventKeys = currentKeys;
 
   // Preserve the current reading position unless follow mode is active or
   // the user was already at the bottom before the refreshed rows were rendered.
@@ -233,12 +255,16 @@ async function refreshEvents() {
   const events = metadataEvents.filter(item =>
     filter === 'all' || (filter === 'REQUEST' ? item.type === 'REQUEST' : item.type === filter)
   );
+  const visibleNewEvents = events.filter(item => newKeys.has(eventKey(item)));
+  if (!shouldFollowLatest) pendingNewEventCount += visibleNewEvents.length;
+
   target.innerHTML = events.length ? events.slice(-200).sort((a, b) => a.timestamp - b.timestamp).map(item => {
     const attachedRaw = rawByEvent.get(item) || [];
     const rawHtml = attachedRaw.length
       ? '<div class="inline-raw-hex">' + attachedRaw.map(detail => '<div>' + esc(detail) + '</div>').join('') + '</div>'
       : '';
-    return '<div class="event-row"><time>' + esc(formatEventTimestamp(item.timestamp)) + '</time><b class="event-type ' + esc(item.type.toLowerCase()) + '">' + esc(item.type) + '</b><span>' + esc(item.profile) + '</span><code>' + esc(item.mti || '-') + '</code><code>' + esc(item.processing_code || '-') + '</code><span>' + esc(item.detail) + rawHtml + '</span></div>';
+    const isNew = newKeys.has(eventKey(item));
+    return '<div class="event-row' + (isNew ? ' event-row-new' : '') + '"><time>' + esc(formatEventTimestamp(item.timestamp)) + '</time><b class="event-type ' + esc(item.type.toLowerCase()) + '">' + esc(item.type) + '</b><span>' + esc(item.profile) + '</span><code>' + esc(item.mti || '-') + '</code><code>' + esc(item.processing_code || '-') + '</code><span>' + esc(item.detail) + rawHtml + '</span></div>';
   }).join('') : '<div class="empty">No matching events yet.</div>';
 
   if (shouldFollowLatest) {
