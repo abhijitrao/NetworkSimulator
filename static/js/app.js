@@ -427,7 +427,9 @@ $('profileList').addEventListener('click', async (event) => {
     }
     else if (action === 'toggle-processing') {
       const enabled = profile.processing_rules_enabled !== false;
-      const rules = Object.entries(profile.processing_code_rules || {}).map(([processing_code, rule]) => ({processing_code, ...rule}));
+      const rules = Object.keys(profile.processing_code_rules || {}).length
+        ? Object.entries(profile.processing_code_rules).map(([processing_code, rule]) => ({processing_code, ...rule}))
+        : (profile.processing_codes || []).map(processing_code => ({processing_code, action:'block', response_hex:''}));
       await api('/api/profiles/' + encodeURIComponent(id) + '/processing-code-rules', {method:'POST',body:JSON.stringify({rules, enabled:!enabled})});
       await refresh(); toast('Processing Code Rules ' + (!enabled ? 'enabled' : 'disabled'));
     }
