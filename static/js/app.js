@@ -306,8 +306,7 @@ async function refreshEvents() {
     }
 
     // Keep the same 200-row display limit as before.
-    const rows = target.querySelectorAll('.event-row[data-event-key]');
-    while (rows.length > 200) {
+    while (target.querySelectorAll('.event-row[data-event-key]').length > 200) {
       const first = target.querySelector('.event-row[data-event-key]');
       if (!first) break;
       renderedEventKeys.delete(first.dataset.eventKey);
