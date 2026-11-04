@@ -8,10 +8,11 @@ import uuid
 
 from simulator.models import FaultSettings, ProxyProfile
 from simulator.proxy.manager import ProxyManager
+from simulator.proxy.iso8583 import Iso8583StreamFramer, decode_frame_length
 
 
 SAMPLE = bytes.fromhex(
-    "0145"  # 145 bytes follow the 2-byte length header.
+    "0091"  # 145 bytes follow (0x0091, 2-byte big-endian HEX length).
     "60009000010800202001000084010A"  # TPDU, MTI, bitmap and following data
 ) + b"960321" + bytes.fromhex(
     "00000100903633303030303237"
@@ -85,6 +86,21 @@ class ProcessingCodeProxyTests(unittest.TestCase):
         self.manager.stop_all()
         self.server.shutdown()
         self.server.server_close()
+
+
+    def test_frame_length_uses_two_byte_big_endian_hex(self):
+        self.assertEqual(decode_frame_length(bytes.fromhex("0152")), 338)
+        self.assertEqual(decode_frame_length(bytes.fromhex("00DD")), 221)
+        self.assertEqual(decode_frame_length(bytes.fromhex("007D")), 125)
+
+        frame = bytearray(SAMPLE)
+        frame.extend(b"\\x00" * (340 - len(frame)))
+        frame[:2] = bytes.fromhex("0152")
+        framer = Iso8583StreamFramer()
+        self.assertEqual(framer.feed(bytes(frame[:100])), [])
+        self.assertEqual(framer.pending_bytes, 100)
+        self.assertEqual(framer.feed(bytes(frame[100:])), [bytes(frame)])
+        self.assertEqual(framer.pending_bytes, 0)
 
     def test_response_rule_forwards_request_but_suppresses_reply(self):
         with socket.create_connection(("127.0.0.1", self.profile.listen_port), timeout=2) as client:
