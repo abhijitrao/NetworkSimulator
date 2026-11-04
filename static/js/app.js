@@ -217,6 +217,18 @@ $('eventLog').addEventListener('scroll', () => {
 
 $('latestEventsBtn').addEventListener('click', scrollEventsToBottom);
 
+function eventRowHtml(item, rawByEvent, animate = false) {
+  const attachedRaw = rawByEvent.get(item) || [];
+  const rawHtml = attachedRaw.length
+    ? '<div class="inline-raw-hex">' + attachedRaw.map(detail => '<div>' + esc(detail) + '</div>').join('') + '</div>'
+    : '';
+  const key = eventKey(item);
+  return '<div class="event-row' + (animate ? ' event-row-new' : '') + '" data-event-key="' + esc(key) + '"><time>' + esc(formatEventTimestamp(item.timestamp)) + '</time><b class="event-type ' + esc(item.type.toLowerCase()) + '">' + esc(item.type) + '</b><span>' + esc(item.profile) + '</span><code>' + esc(item.mti || '-') + '</code><code>' + esc(item.processing_code || '-') + '</code><span>' + esc(item.detail) + rawHtml + '</span></div>';
+}
+
+let renderedEventFilter = null;
+let renderedEventKeys = new Set();
+
 async function refreshEvents() {
   const filter = $('eventFilter').value;
   const data = await api('/api/events');
@@ -224,20 +236,19 @@ async function refreshEvents() {
   const metadataEvents = allEvents.filter(item => !['RAW_REQUEST', 'RAW_RESPONSE'].includes(item.type));
   const rawEvents = allEvents.filter(item => ['RAW_REQUEST', 'RAW_RESPONSE'].includes(item.type));
 
-  // On initial load, establish a baseline. Later refreshes identify newly received events.
+  // Keep a baseline of all metadata events so the first render never animates old history.
   const currentKeys = new Set(metadataEvents.map(eventKey));
   const newKeys = seenEventKeys === null
     ? new Set()
     : new Set(metadataEvents.filter(item => !seenEventKeys.has(eventKey(item))).map(eventKey));
   seenEventKeys = currentKeys;
 
-  // Preserve the current reading position unless follow mode is active or
-  // the user was already at the bottom before the refreshed rows were rendered.
   const target = $('eventLog');
+  const filterChanged = renderedEventFilter !== filter;
   const shouldFollowLatest = autoScrollEvents || isEventLogAtBottom(target);
 
-  // Attach each raw packet chunk to the nearest matching metadata event
-  // from the same connection and direction instead of rendering another row.
+  // Attach raw packet chunks to their nearest metadata event from the same
+  // connection and direction, without creating separate traffic-log rows.
   const rawByEvent = new Map();
   for (const raw of rawEvents) {
     const metadataType = raw.type === 'RAW_REQUEST' ? 'REQUEST' : 'RESPONSE';
@@ -254,18 +265,55 @@ async function refreshEvents() {
 
   const events = metadataEvents.filter(item =>
     filter === 'all' || (filter === 'REQUEST' ? item.type === 'REQUEST' : item.type === filter)
-  );
-  const visibleNewEvents = events.filter(item => newKeys.has(eventKey(item)));
-  if (!shouldFollowLatest) pendingNewEventCount += visibleNewEvents.length;
+  ).slice(-200).sort((a, b) => a.timestamp - b.timestamp);
 
-  target.innerHTML = events.length ? events.slice(-200).sort((a, b) => a.timestamp - b.timestamp).map(item => {
-    const attachedRaw = rawByEvent.get(item) || [];
-    const rawHtml = attachedRaw.length
-      ? '<div class="inline-raw-hex">' + attachedRaw.map(detail => '<div>' + esc(detail) + '</div>').join('') + '</div>'
-      : '';
-    const isNew = newKeys.has(eventKey(item));
-    return '<div class="event-row' + (isNew ? ' event-row-new' : '') + '"><time>' + esc(formatEventTimestamp(item.timestamp)) + '</time><b class="event-type ' + esc(item.type.toLowerCase()) + '">' + esc(item.type) + '</b><span>' + esc(item.profile) + '</span><code>' + esc(item.mti || '-') + '</code><code>' + esc(item.processing_code || '-') + '</code><span>' + esc(item.detail) + rawHtml + '</span></div>';
-  }).join('') : '<div class="empty">No matching events yet.</div>';
+  if (filterChanged) {
+    // A filter change is a fresh view, not a stream of newly arriving events.
+    target.replaceChildren();
+    renderedEventKeys.clear();
+    renderedEventFilter = filter;
+    pendingNewEventCount = 0;
+    events.forEach(item => {
+      target.insertAdjacentHTML('beforeend', eventRowHtml(item, rawByEvent));
+      renderedEventKeys.add(eventKey(item));
+    });
+  } else if (!events.length) {
+    target.innerHTML = '<div class="empty">No matching events yet.</div>';
+    renderedEventKeys.clear();
+  } else {
+    target.querySelector('.empty')?.remove();
+
+    // Remove entries that have rolled out of the server's retained event window.
+    const visibleKeys = new Set(events.map(eventKey));
+    for (const row of [...target.querySelectorAll('.event-row[data-event-key]')]) {
+      if (!visibleKeys.has(row.dataset.eventKey)) {
+        renderedEventKeys.delete(row.dataset.eventKey);
+        row.remove();
+      }
+    }
+
+    // Append only events not already rendered. Existing rows stay in place,
+    // so polling does not rebuild the list or disturb the user's reading position.
+    const incoming = events.filter(item => !renderedEventKeys.has(eventKey(item)));
+    incoming.forEach(item => {
+      const isNew = newKeys.has(eventKey(item));
+      target.insertAdjacentHTML('beforeend', eventRowHtml(item, rawByEvent, isNew));
+      renderedEventKeys.add(eventKey(item));
+    });
+
+    if (!shouldFollowLatest && incoming.length) {
+      pendingNewEventCount += incoming.filter(item => newKeys.has(eventKey(item))).length;
+    }
+
+    // Keep the same 200-row display limit as before.
+    const rows = target.querySelectorAll('.event-row[data-event-key]');
+    while (rows.length > 200) {
+      const first = target.querySelector('.event-row[data-event-key]');
+      if (!first) break;
+      renderedEventKeys.delete(first.dataset.eventKey);
+      first.remove();
+    }
+  }
 
   if (shouldFollowLatest) {
     scrollEventsToBottom();
