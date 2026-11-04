@@ -249,6 +249,26 @@ class ProcessingCodeProxyTests(unittest.TestCase):
         self.assertEqual(self.manager.configure_request_sequence_fault(self.profile.id, False, [4])["counter"], 0)
         self.assertIsNone(self.manager._on_request_accepted(self.profile.id))
 
+    def test_sequence_counter_resets_immediately_after_last_configured_order(self):
+        self.manager.configure_request_sequence_fault(self.profile.id, True, [2, 3, 5], reset_on_end=True)
+        self.assertEqual(self.manager._on_request_accepted(self.profile.id), (1, False))
+        self.assertEqual(self.manager._on_request_accepted(self.profile.id), (2, True))
+        self.assertEqual(self.manager._on_request_accepted(self.profile.id), (3, True))
+        self.assertEqual(self.manager._on_request_accepted(self.profile.id), (4, False))
+        self.assertEqual(self.manager._on_request_accepted(self.profile.id), (5, True))
+        self.assertEqual(self.manager.request_sequence_status(self.profile.id)["counter"], 0)
+        self.assertEqual(self.manager._on_request_accepted(self.profile.id), (1, False))
+
+    def test_manual_reset_keeps_end_sequence_reset_enabled(self):
+        self.manager.configure_request_sequence_fault(self.profile.id, True, [2, 3, 5], reset_on_end=True)
+        self.manager._on_request_accepted(self.profile.id)
+        self.manager._on_request_accepted(self.profile.id)
+        status = self.manager.reset_request_sequence_fault(self.profile.id)
+        self.assertEqual(status["counter"], 0)
+        self.assertTrue(status["reset_on_end"])
+        self.assertEqual(self.manager._on_request_accepted(self.profile.id), (1, False))
+        self.assertEqual(self.manager._on_request_accepted(self.profile.id), (2, True))
+
     def test_sequence_counters_are_independent_per_profile(self):
         second_id = str(uuid.uuid4())
         self.manager.configure_request_sequence_fault(self.profile.id, True, [2])
