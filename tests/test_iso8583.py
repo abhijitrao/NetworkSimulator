@@ -4,14 +4,14 @@ import unittest
 from simulator.proxy.iso8583 import (
     Iso8583FrameError,
     Iso8583StreamFramer,
-    decode_bcd_length,
+    decode_frame_length,
     extract_processing_code,
     extract_mti,
 )
 
 
 SAMPLE = bytes.fromhex(
-    "014560009000010800202001000084010A96032100000100903633303030303237"
+    "009160009000010800202001000084010A96032100000100903633303030303237"
     "002330307C4646464646363030303030303030383030344244001684C6972FDA53F42"
     "C2D52ED95D261FA5A005034583939302020426F6E7573487562202030332E30322E"
     "30322E323530313133303030303030303030303030303030303030001730333037"
@@ -23,8 +23,8 @@ class Iso8583ParserTests(unittest.TestCase):
     def test_sample_packet_with_ascii_processing_code(self):
         # Replace the sample's three packed bytes with six ASCII digits.
         frame = SAMPLE[:17] + b"960321" + SAMPLE[20:]
-        frame = bytes.fromhex("0148") + frame[2:]
-        self.assertEqual(decode_bcd_length(frame[:2]), 148)
+        frame = bytes.fromhex("0094") + frame[2:]
+        self.assertEqual(decode_frame_length(frame[:2]), 148)
         self.assertEqual(len(frame) - 2, 148)
         self.assertEqual(extract_processing_code(frame), "960321")
 
@@ -41,7 +41,7 @@ class Iso8583ParserTests(unittest.TestCase):
             "5E305E30005034413931305320426F6E7573487562202030332E30342E30312E"
             "32363130323830303030303330383730303030303030303000173238343030313032373520202020203031"
         )
-        self.assertEqual(decode_bcd_length(frame[:2]), 221)
+        self.assertEqual(decode_frame_length(frame[:2]), 221)
         self.assertEqual(len(frame) - 2, 221)
         self.assertEqual(extract_mti(frame), "0800")
         self.assertEqual(extract_processing_code(frame), "982003")
@@ -49,7 +49,7 @@ class Iso8583ParserTests(unittest.TestCase):
     def test_binary_length_header_and_processing_code(self):
         payload = bytes.fromhex("60009100010800202001000081008A") + b"982003" + bytes(220 - 21)
         frame = bytes.fromhex("00DC") + payload
-        self.assertEqual(decode_bcd_length(frame[:2]), 220)
+        self.assertEqual(decode_frame_length(frame[:2]), 220)
         self.assertEqual(len(frame) - 2, 220)
         self.assertEqual(extract_mti(frame), "0800")
         self.assertEqual(extract_processing_code(frame), "982003")
@@ -78,7 +78,7 @@ class Iso8583ParserTests(unittest.TestCase):
             extract_processing_code(bytes(frame))
 
     def test_non_decimal_length_header_uses_binary_value(self):
-        self.assertEqual(decode_bcd_length(bytes.fromhex("01FA")), 506)
+        self.assertEqual(decode_frame_length(bytes.fromhex("01FA")), 506)
 
 
 if __name__ == "__main__":
