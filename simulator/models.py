@@ -52,6 +52,7 @@ class ProxyProfile:
     raw_hex_logging: bool = False
     request_sequence_enabled: bool = False
     request_sequence_orders: list[int] = field(default_factory=list)
+    request_sequence_reset_on_end: bool = False
     fault_profile: FaultSettings = field(default_factory=FaultSettings)
 
     @classmethod
@@ -73,6 +74,7 @@ class ProxyProfile:
             raw_hex_logging=bool(value.get("raw_hex_logging", False)),
             request_sequence_enabled=bool(value.get("request_sequence_enabled", False)),
             request_sequence_orders=sorted(set(int(order) for order in value.get("request_sequence_orders", []))),
+            request_sequence_reset_on_end=bool(value.get("request_sequence_reset_on_end", False)),
             fault_profile=FaultSettings.from_dict(value.get("fault_profile")),
         )
         profile.validate()
