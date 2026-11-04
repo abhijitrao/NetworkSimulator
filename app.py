@@ -65,7 +65,8 @@ def create_app(config_path: str | Path = CONFIG_PATH, manager: ProxyManager | No
     # Restore each profile's sequence settings; counters always restart at zero.
     for saved_profile in profiles():
         proxy_manager.configure_request_sequence_fault(
-            saved_profile.id, saved_profile.request_sequence_enabled, saved_profile.request_sequence_orders
+            saved_profile.id, saved_profile.request_sequence_enabled, saved_profile.request_sequence_orders,
+            saved_profile.request_sequence_reset_on_end
         )
 
     @app.before_request
@@ -248,8 +249,9 @@ def create_app(config_path: str | Path = CONFIG_PATH, manager: ProxyManager | No
         payload = request.get_json(force=True) or {}
         enabled = payload.get("enabled", False)
         raw_orders = payload.get("orders", [])
-        if not isinstance(enabled, bool):
-            return jsonify(error="enabled must be a boolean"), 400
+        reset_on_end = payload.get("reset_on_end", False)
+        if not isinstance(enabled, bool) or not isinstance(reset_on_end, bool):
+            return jsonify(error="enabled and reset_on_end must be booleans"), 400
         if isinstance(raw_orders, str):
             raw_orders = [part.strip() for part in raw_orders.split(",") if part.strip()]
         if not isinstance(raw_orders, list):
@@ -263,8 +265,9 @@ def create_app(config_path: str | Path = CONFIG_PATH, manager: ProxyManager | No
                 profile = find_profile(profile_id, items)
                 profile.request_sequence_enabled = enabled
                 profile.request_sequence_orders = orders
+                profile.request_sequence_reset_on_end = reset_on_end
                 store.save(items)
-            status = proxy_manager.configure_request_sequence_fault(profile_id, enabled, orders)
+            status = proxy_manager.configure_request_sequence_fault(profile_id, enabled, orders, reset_on_end)
         except (TypeError, ValueError) as exc:
             return jsonify(error=str(exc)), 400
         except LookupError as exc:
