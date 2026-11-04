@@ -2,6 +2,17 @@
 
 This file tracks the user-facing changes included in each stable release.
 
+## v1.7 — Pending Release
+
+### Request Sequence Blocking
+- Added an option to reset the request sequence counter automatically as soon as the configured end sequence is executed.
+- Manual counter reset preserves the automatic-reset setting and restarts the configured sequence from its beginning.
+
+### Profile feature controls
+- Added clickable Enabled/Disabled controls to Request Sequence Blocking and Processing Code Rules profile cards.
+- Preserved legacy Processing Code configuration and behaviour when toggling the feature.
+
+
 ## v1.6 — Stable Release
 
 ### Traffic Event Log
