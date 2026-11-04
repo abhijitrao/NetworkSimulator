@@ -2,15 +2,17 @@
 import socket
 import socketserver
 import threading
+import time
 import unittest
 import uuid
 
 from simulator.models import FaultSettings, ProxyProfile
 from simulator.proxy.manager import ProxyManager
+from simulator.proxy.iso8583 import Iso8583StreamFramer, decode_frame_length
 
 
 SAMPLE = bytes.fromhex(
-    "0145"  # 145 bytes follow the 2-byte length header.
+    "0091"  # 145 bytes follow (0x0091, 2-byte big-endian HEX length).
     "60009000010800202001000084010A"  # TPDU, MTI, bitmap and following data
 ) + b"960321" + bytes.fromhex(
     "00000100903633303030303237"
@@ -24,6 +26,7 @@ SAMPLE = bytes.fromhex(
 class RecordingEchoHandler(socketserver.BaseRequestHandler):
     received = []
     received_event = threading.Event()
+    fragment_response = False
 
     def handle(self):
         self.request.settimeout(1)
@@ -32,7 +35,12 @@ class RecordingEchoHandler(socketserver.BaseRequestHandler):
             if data:
                 self.received.append(data)
                 self.received_event.set()
-                self.request.sendall(data)
+                if self.fragment_response and len(data) > 10:
+                    self.request.sendall(data[:10])
+                    time.sleep(0.05)
+                    self.request.sendall(data[10:])
+                else:
+                    self.request.sendall(data)
         except OSError:
             pass
 
@@ -41,6 +49,7 @@ class ProcessingCodeProxyTests(unittest.TestCase):
     def setUp(self):
         RecordingEchoHandler.received = []
         RecordingEchoHandler.received_event = threading.Event()
+        RecordingEchoHandler.fragment_response = False
 
         class EchoServer(socketserver.ThreadingTCPServer):
             allow_reuse_address = True
@@ -77,6 +86,21 @@ class ProcessingCodeProxyTests(unittest.TestCase):
         self.manager.stop_all()
         self.server.shutdown()
         self.server.server_close()
+
+
+    def test_frame_length_uses_two_byte_big_endian_hex(self):
+        self.assertEqual(decode_frame_length(bytes.fromhex("0152")), 338)
+        self.assertEqual(decode_frame_length(bytes.fromhex("00DD")), 221)
+        self.assertEqual(decode_frame_length(bytes.fromhex("007D")), 125)
+
+        frame = bytearray(SAMPLE)
+        frame.extend(bytes(340 - len(frame)))
+        frame[:2] = bytes.fromhex("0152")
+        framer = Iso8583StreamFramer()
+        self.assertEqual(framer.feed(bytes(frame[:100])), [])
+        self.assertEqual(framer.pending_bytes, 100)
+        self.assertEqual(framer.feed(bytes(frame[100:])), [bytes(frame)])
+        self.assertEqual(framer.pending_bytes, 0)
 
     def test_response_rule_forwards_request_but_suppresses_reply(self):
         with socket.create_connection(("127.0.0.1", self.profile.listen_port), timeout=2) as client:
@@ -132,6 +156,30 @@ class ProcessingCodeProxyTests(unittest.TestCase):
                 client.recv(4096)
         self.assertFalse(RecordingEchoHandler.received_event.wait(0.2))
         self.assertTrue(any(e["type"] == "DROPPED" and e["processing_code"] == "960321" for e in self.events))
+
+    def test_block_rule_does_not_break_unmatched_api_with_fragmented_host_response(self):
+        # 960321 is blocked, but a different Processing Code must still pass through.
+        self.manager.set_processing_code_rules(self.profile.id, {
+            "960321": {"action": "block", "response_hex": ""}
+        })
+        RecordingEchoHandler.fragment_response = True
+        unmatched_request = SAMPLE[:17] + b"982002" + SAMPLE[23:]
+
+        with socket.create_connection(("127.0.0.1", self.profile.listen_port), timeout=2) as client:
+            client.settimeout(2)
+            client.sendall(unmatched_request)
+            received = bytearray()
+            while len(received) < len(unmatched_request):
+                part = client.recv(len(unmatched_request) - len(received))
+                self.assertTrue(part, "Proxy closed before the complete host response arrived")
+                received.extend(part)
+
+        self.assertEqual(bytes(received), unmatched_request)
+        self.assertEqual(RecordingEchoHandler.received[-1], unmatched_request)
+        self.assertTrue(any(
+            event["type"] == "REQUEST" and event["processing_code"] == "982002"
+            for event in self.events
+        ))
 
     def test_alter_response_rule_replaces_server_frame(self):
         replacement = bytearray(SAMPLE)
