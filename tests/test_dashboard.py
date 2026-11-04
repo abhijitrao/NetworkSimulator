@@ -52,6 +52,16 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json["total"], 2)
 
+    def test_request_sequence_reset_on_end_is_saved_and_returned(self):
+        response = self.client.post("/api/profiles/one/request-sequence-fault", json={
+            "enabled": True, "orders": [2, 3, 5], "reset_on_end": True,
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json["reset_on_end"])
+        saved = ProfileStore(self.config).load()[0]
+        self.assertTrue(saved.request_sequence_reset_on_end)
+        self.assertEqual(saved.request_sequence_orders, [2, 3, 5])
+
     def test_processing_codes_are_saved_for_plain_tcp_profile(self):
         response = self.client.post("/api/profiles/one/processing-codes", json={
             "processing_codes": ["960321", "000000", "960321"], "apply_to": "response"
