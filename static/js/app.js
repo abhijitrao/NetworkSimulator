@@ -175,12 +175,44 @@ function formatEventTimestamp(timestamp) {
     ' ' + pad(date.getHours()) + ':' + pad(date.getMinutes()) + ':' + pad(date.getSeconds()) +
     '.' + pad(date.getMilliseconds(), 3);
 }
+let autoScrollEvents = true;
+const EVENT_LOG_BOTTOM_THRESHOLD = 8;
+
+function isEventLogAtBottom(target = $('eventLog')) {
+  return target.scrollHeight - target.scrollTop - target.clientHeight <= EVENT_LOG_BOTTOM_THRESHOLD;
+}
+
+function updateLatestLogsButton() {
+  const button = $('latestEventsBtn');
+  if (button) button.hidden = autoScrollEvents || isEventLogAtBottom();
+}
+
+function scrollEventsToBottom() {
+  const target = $('eventLog');
+  target.scrollTop = target.scrollHeight;
+  autoScrollEvents = true;
+  updateLatestLogsButton();
+}
+
+$('eventLog').addEventListener('scroll', () => {
+  // Re-enable follow mode as soon as the user reaches the bottom again.
+  autoScrollEvents = isEventLogAtBottom();
+  updateLatestLogsButton();
+}, {passive:true});
+
+$('latestEventsBtn').addEventListener('click', scrollEventsToBottom);
+
 async function refreshEvents() {
   const filter = $('eventFilter').value;
   const data = await api('/api/events');
   const allEvents = data.events || [];
   const metadataEvents = allEvents.filter(item => !['RAW_REQUEST', 'RAW_RESPONSE'].includes(item.type));
   const rawEvents = allEvents.filter(item => ['RAW_REQUEST', 'RAW_RESPONSE'].includes(item.type));
+
+  // Preserve the current reading position unless follow mode is active or
+  // the user was already at the bottom before the refreshed rows were rendered.
+  const target = $('eventLog');
+  const shouldFollowLatest = autoScrollEvents || isEventLogAtBottom(target);
 
   // Attach each raw packet chunk to the nearest matching metadata event
   // from the same connection and direction instead of rendering another row.
@@ -194,15 +226,13 @@ async function refreshEvents() {
     const nearest = candidates.reduce((best, item) =>
       Math.abs(item.timestamp - raw.timestamp) < Math.abs(best.timestamp - raw.timestamp) ? item : best
     );
-    const key = nearest;
-    if (!rawByEvent.has(key)) rawByEvent.set(key, []);
-    rawByEvent.get(key).push(raw.detail);
+    if (!rawByEvent.has(nearest)) rawByEvent.set(nearest, []);
+    rawByEvent.get(nearest).push(raw.detail);
   }
 
   const events = metadataEvents.filter(item =>
     filter === 'all' || (filter === 'REQUEST' ? item.type === 'REQUEST' : item.type === filter)
   );
-  const target = $('eventLog');
   target.innerHTML = events.length ? events.slice(-200).sort((a, b) => a.timestamp - b.timestamp).map(item => {
     const attachedRaw = rawByEvent.get(item) || [];
     const rawHtml = attachedRaw.length
@@ -210,8 +240,18 @@ async function refreshEvents() {
       : '';
     return '<div class="event-row"><time>' + esc(formatEventTimestamp(item.timestamp)) + '</time><b class="event-type ' + esc(item.type.toLowerCase()) + '">' + esc(item.type) + '</b><span>' + esc(item.profile) + '</span><code>' + esc(item.mti || '-') + '</code><code>' + esc(item.processing_code || '-') + '</code><span>' + esc(item.detail) + rawHtml + '</span></div>';
   }).join('') : '<div class="empty">No matching events yet.</div>';
+
+  if (shouldFollowLatest) {
+    scrollEventsToBottom();
+  } else {
+    autoScrollEvents = false;
+    updateLatestLogsButton();
+  }
 }
-$('eventFilter').addEventListener('change', () => refreshEvents().catch(() => {}));
+$('eventFilter').addEventListener('change', () => {
+  autoScrollEvents = true;
+  refreshEvents().catch(() => {});
+});
 $('exportEventsBtn').addEventListener('click', () => { window.location.href = '/api/events/export'; });
 function setEventsFullscreen(expanded) {
   const panel = document.querySelector('.event-panel');
