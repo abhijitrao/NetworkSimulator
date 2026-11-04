@@ -139,3 +139,26 @@ body.event-fullscreen-open{overflow:hidden}
 @media(max-width:700px){.processing-rule-row{grid-template-columns:1fr 1fr}.processing-rule-row .processing-response-field{grid-column:1/-1}.processing-rule-row .remove-processing-rule{margin-top:0;justify-self:end}}
 
 #featureDialog{position:relative;overflow:visible}#featureDialog .toast{position:absolute;top:12px;right:12px;bottom:auto;z-index:1000}
+
+
+/* Smart traffic-log follow mode and jump-to-latest control. */
+.event-log{position:relative;scroll-behavior:auto;overscroll-behavior:contain}
+.latest-events-btn{
+  position:absolute;
+  right:32px;
+  bottom:34px;
+  z-index:2;
+  padding:10px 15px;
+  border:1px solid #4c8bd8;
+  border-radius:999px;
+  background:#1d4f83;
+  color:#f4f8ff;
+  box-shadow:0 5px 18px #0008;
+  font-size:12px;
+  font-weight:700;
+  cursor:pointer;
+}
+.latest-events-btn:hover{background:#28649f}
+.latest-events-btn[hidden]{display:none}
+.event-panel{position:relative}
+.event-panel-fullscreen .latest-events-btn{position:fixed;right:36px;bottom:34px}
