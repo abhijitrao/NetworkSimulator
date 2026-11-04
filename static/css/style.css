@@ -139,3 +139,72 @@ body.event-fullscreen-open{overflow:hidden}
 @media(max-width:700px){.processing-rule-row{grid-template-columns:1fr 1fr}.processing-rule-row .processing-response-field{grid-column:1/-1}.processing-rule-row .remove-processing-rule{margin-top:0;justify-self:end}}
 
 #featureDialog{position:relative;overflow:visible}#featureDialog .toast{position:absolute;top:12px;right:12px;bottom:auto;z-index:1000}
+
+
+/* Smart traffic-log follow mode and jump-to-latest control. */
+.event-log{position:relative;scroll-behavior:auto;overscroll-behavior:contain}
+.latest-events-btn{
+  position:absolute;
+  right:32px;
+  bottom:16px;
+  z-index:5;
+  width:44px;
+  height:44px;
+  display:grid;
+  place-items:center;
+  padding:0;
+  border:1px solid #4c8bd8;
+  border-radius:50%;
+  background:#1d4f83;
+  color:#f4f8ff;
+  box-shadow:0 5px 18px #0008;
+  font-size:24px;
+  line-height:1;
+  font-weight:700;
+  cursor:pointer;
+}
+.latest-events-btn:hover{background:#28649f}
+.latest-events-btn[hidden]{display:none}
+.event-panel{position:relative}
+/* Keep fullscreen positioning stronger than the base .event-panel rule. */
+.event-panel.event-panel-fullscreen{
+  position:fixed;
+  inset:12px;
+  z-index:1000;
+  display:flex;
+  flex-direction:column;
+  min-height:0;
+  margin:0!important;
+}
+.event-panel.event-panel-fullscreen .latest-events-btn{
+  position:absolute;
+  right:32px;
+  bottom:16px;
+}
+
+/* Android Studio Logcat-style arrival: fade only, with no slide or glow. */
+@keyframes event-row-fade-in{
+  from{opacity:0}
+  to{opacity:1}
+}
+.event-row.event-row-new{animation:event-row-fade-in 180ms ease-out both}
+.latest-events-btn.has-new-events::after{
+  content:attr(data-count);
+  position:absolute;
+  top:-5px;
+  right:-5px;
+  min-width:19px;
+  height:19px;
+  display:grid;
+  place-items:center;
+  padding:0 5px;
+  border:1px solid #0b1020;
+  border-radius:12px;
+  background:#e05268;
+  color:#fff;
+  font:700 10px/1 "Segoe UI",Arial,sans-serif;
+  box-shadow:0 2px 7px #0008;
+}
+@media(prefers-reduced-motion:reduce){
+  .event-row.event-row-new{animation:none}
+}

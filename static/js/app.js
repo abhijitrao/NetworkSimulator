@@ -175,6 +175,60 @@ function formatEventTimestamp(timestamp) {
     ' ' + pad(date.getHours()) + ':' + pad(date.getMinutes()) + ':' + pad(date.getSeconds()) +
     '.' + pad(date.getMilliseconds(), 3);
 }
+let autoScrollEvents = true;
+let seenEventKeys = null;
+let pendingNewEventCount = 0;
+const EVENT_LOG_BOTTOM_THRESHOLD = 8;
+
+function eventKey(item) {
+  return [item.timestamp, item.connection_id || '', item.type, item.mti || '', item.processing_code || '', item.detail || ''].join('|');
+}
+
+function isEventLogAtBottom(target = $('eventLog')) {
+  return target.scrollHeight - target.scrollTop - target.clientHeight <= EVENT_LOG_BOTTOM_THRESHOLD;
+}
+
+function updateLatestLogsButton() {
+  const button = $('latestEventsBtn');
+  if (!button) return;
+  const awayFromBottom = !autoScrollEvents && !isEventLogAtBottom();
+  button.hidden = !awayFromBottom;
+  button.dataset.count = pendingNewEventCount > 99 ? '99+' : String(pendingNewEventCount);
+  button.classList.toggle('has-new-events', awayFromBottom && pendingNewEventCount > 0);
+  button.setAttribute('aria-label', pendingNewEventCount
+    ? 'Scroll to latest logs, ' + pendingNewEventCount + ' new events'
+    : 'Scroll to latest logs');
+}
+
+function scrollEventsToBottom() {
+  const target = $('eventLog');
+  target.scrollTop = target.scrollHeight;
+  autoScrollEvents = true;
+  pendingNewEventCount = 0;
+  updateLatestLogsButton();
+}
+
+$('eventLog').addEventListener('scroll', () => {
+  // Re-enable follow mode as soon as the user reaches the bottom again.
+  autoScrollEvents = isEventLogAtBottom();
+  if (autoScrollEvents) pendingNewEventCount = 0;
+  updateLatestLogsButton();
+}, {passive:true});
+
+$('latestEventsBtn').addEventListener('click', scrollEventsToBottom);
+
+function eventRowHtml(item, rawByEvent, animate = false) {
+  const attachedRaw = rawByEvent.get(item) || [];
+  const rawHtml = attachedRaw.length
+    ? '<div class="inline-raw-hex">' + attachedRaw.map(detail => '<div>' + esc(detail) + '</div>').join('') + '</div>'
+    : '';
+  const key = eventKey(item);
+  return '<div class="event-row' + (animate ? ' event-row-new' : '') + '" data-event-key="' + esc(key) + '"><time>' + esc(formatEventTimestamp(item.timestamp)) + '</time><b class="event-type ' + esc(item.type.toLowerCase()) + '">' + esc(item.type) + '</b><span>' + esc(item.profile) + '</span><code>' + esc(item.mti || '-') + '</code><code>' + esc(item.processing_code || '-') + '</code><span>' + esc(item.detail) + rawHtml + '</span></div>';
+}
+
+let renderedEventFilter = null;
+let renderedEventKeys = new Set();
+
 async function refreshEvents() {
   const filter = $('eventFilter').value;
   const data = await api('/api/events');
@@ -182,8 +236,19 @@ async function refreshEvents() {
   const metadataEvents = allEvents.filter(item => !['RAW_REQUEST', 'RAW_RESPONSE'].includes(item.type));
   const rawEvents = allEvents.filter(item => ['RAW_REQUEST', 'RAW_RESPONSE'].includes(item.type));
 
-  // Attach each raw packet chunk to the nearest matching metadata event
-  // from the same connection and direction instead of rendering another row.
+  // Keep a baseline of all metadata events so the first render never animates old history.
+  const currentKeys = new Set(metadataEvents.map(eventKey));
+  const newKeys = seenEventKeys === null
+    ? new Set()
+    : new Set(metadataEvents.filter(item => !seenEventKeys.has(eventKey(item))).map(eventKey));
+  seenEventKeys = currentKeys;
+
+  const target = $('eventLog');
+  const filterChanged = renderedEventFilter !== filter;
+  const shouldFollowLatest = autoScrollEvents || isEventLogAtBottom(target);
+
+  // Attach raw packet chunks to their nearest metadata event from the same
+  // connection and direction, without creating separate traffic-log rows.
   const rawByEvent = new Map();
   for (const raw of rawEvents) {
     const metadataType = raw.type === 'RAW_REQUEST' ? 'REQUEST' : 'RESPONSE';
@@ -194,24 +259,72 @@ async function refreshEvents() {
     const nearest = candidates.reduce((best, item) =>
       Math.abs(item.timestamp - raw.timestamp) < Math.abs(best.timestamp - raw.timestamp) ? item : best
     );
-    const key = nearest;
-    if (!rawByEvent.has(key)) rawByEvent.set(key, []);
-    rawByEvent.get(key).push(raw.detail);
+    if (!rawByEvent.has(nearest)) rawByEvent.set(nearest, []);
+    rawByEvent.get(nearest).push(raw.detail);
   }
 
   const events = metadataEvents.filter(item =>
     filter === 'all' || (filter === 'REQUEST' ? item.type === 'REQUEST' : item.type === filter)
-  );
-  const target = $('eventLog');
-  target.innerHTML = events.length ? events.slice(-200).sort((a, b) => a.timestamp - b.timestamp).map(item => {
-    const attachedRaw = rawByEvent.get(item) || [];
-    const rawHtml = attachedRaw.length
-      ? '<div class="inline-raw-hex">' + attachedRaw.map(detail => '<div>' + esc(detail) + '</div>').join('') + '</div>'
-      : '';
-    return '<div class="event-row"><time>' + esc(formatEventTimestamp(item.timestamp)) + '</time><b class="event-type ' + esc(item.type.toLowerCase()) + '">' + esc(item.type) + '</b><span>' + esc(item.profile) + '</span><code>' + esc(item.mti || '-') + '</code><code>' + esc(item.processing_code || '-') + '</code><span>' + esc(item.detail) + rawHtml + '</span></div>';
-  }).join('') : '<div class="empty">No matching events yet.</div>';
+  ).slice(-200).sort((a, b) => a.timestamp - b.timestamp);
+
+  if (filterChanged) {
+    // A filter change is a fresh view, not a stream of newly arriving events.
+    target.replaceChildren();
+    renderedEventKeys.clear();
+    renderedEventFilter = filter;
+    pendingNewEventCount = 0;
+    events.forEach(item => {
+      target.insertAdjacentHTML('beforeend', eventRowHtml(item, rawByEvent));
+      renderedEventKeys.add(eventKey(item));
+    });
+  } else if (!events.length) {
+    target.innerHTML = '<div class="empty">No matching events yet.</div>';
+    renderedEventKeys.clear();
+  } else {
+    target.querySelector('.empty')?.remove();
+
+    // Remove entries that have rolled out of the server's retained event window.
+    const visibleKeys = new Set(events.map(eventKey));
+    for (const row of [...target.querySelectorAll('.event-row[data-event-key]')]) {
+      if (!visibleKeys.has(row.dataset.eventKey)) {
+        renderedEventKeys.delete(row.dataset.eventKey);
+        row.remove();
+      }
+    }
+
+    // Append only events not already rendered. Existing rows stay in place,
+    // so polling does not rebuild the list or disturb the user's reading position.
+    const incoming = events.filter(item => !renderedEventKeys.has(eventKey(item)));
+    incoming.forEach(item => {
+      const isNew = newKeys.has(eventKey(item));
+      target.insertAdjacentHTML('beforeend', eventRowHtml(item, rawByEvent, isNew));
+      renderedEventKeys.add(eventKey(item));
+    });
+
+    if (!shouldFollowLatest && incoming.length) {
+      pendingNewEventCount += incoming.filter(item => newKeys.has(eventKey(item))).length;
+    }
+
+    // Keep the same 200-row display limit as before.
+    while (target.querySelectorAll('.event-row[data-event-key]').length > 200) {
+      const first = target.querySelector('.event-row[data-event-key]');
+      if (!first) break;
+      renderedEventKeys.delete(first.dataset.eventKey);
+      first.remove();
+    }
+  }
+
+  if (shouldFollowLatest) {
+    scrollEventsToBottom();
+  } else {
+    autoScrollEvents = false;
+    updateLatestLogsButton();
+  }
 }
-$('eventFilter').addEventListener('change', () => refreshEvents().catch(() => {}));
+$('eventFilter').addEventListener('change', () => {
+  autoScrollEvents = true;
+  refreshEvents().catch(() => {});
+});
 $('exportEventsBtn').addEventListener('click', () => { window.location.href = '/api/events/export'; });
 function setEventsFullscreen(expanded) {
   const panel = document.querySelector('.event-panel');
