@@ -427,10 +427,15 @@ $('profileList').addEventListener('click', async (event) => {
     }
     else if (action === 'toggle-processing') {
       const enabled = profile.processing_rules_enabled !== false;
-      const rules = Object.keys(profile.processing_code_rules || {}).length
-        ? Object.entries(profile.processing_code_rules).map(([processing_code, rule]) => ({processing_code, ...rule}))
-        : (profile.processing_codes || []).map(processing_code => ({processing_code, action:'block', response_hex:''}));
-      await api('/api/profiles/' + encodeURIComponent(id) + '/processing-code-rules', {method:'POST',body:JSON.stringify({rules, enabled:!enabled})});
+      if (Object.keys(profile.processing_code_rules || {}).length) {
+        const rules = Object.entries(profile.processing_code_rules).map(([processing_code, rule]) => ({processing_code, ...rule}));
+        await api('/api/profiles/' + encodeURIComponent(id) + '/processing-code-rules', {method:'POST',body:JSON.stringify({rules, enabled:!enabled})});
+      } else {
+        await api('/api/profiles/' + encodeURIComponent(id) + '/processing-codes', {method:'POST',body:JSON.stringify({
+          processing_codes:profile.processing_codes || [], enabled:!enabled,
+          apply_to:(profile.fault_profile || {}).apply_to || 'request'
+        })});
+      }
       await refresh(); toast('Processing Code Rules ' + (!enabled ? 'enabled' : 'disabled'));
     }
     else if (action === 'preset') {
