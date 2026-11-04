@@ -94,7 +94,7 @@ class ProcessingCodeProxyTests(unittest.TestCase):
         self.assertEqual(decode_frame_length(bytes.fromhex("007D")), 125)
 
         frame = bytearray(SAMPLE)
-        frame.extend(b"\\x00" * (340 - len(frame)))
+        frame.extend(bytes(340 - len(frame)))
         frame[:2] = bytes.fromhex("0152")
         framer = Iso8583StreamFramer()
         self.assertEqual(framer.feed(bytes(frame[:100])), [])
