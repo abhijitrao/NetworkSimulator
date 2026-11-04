@@ -182,14 +182,12 @@ body.event-fullscreen-open{overflow:hidden}
   bottom:16px;
 }
 
-/* Make incoming traffic visible without interrupting manual log browsing. */
-@keyframes event-row-arrive{
-  0%{background:#245b78;box-shadow:inset 3px 0 0 #70c9ff}
-  65%{background:#17364a;box-shadow:inset 3px 0 0 #70c9ff}
-  100%{background:transparent;box-shadow:inset 0 0 0 transparent}
+/* Android Studio Logcat-style arrival: fade only, with no slide or glow. */
+@keyframes event-row-fade-in{
+  from{opacity:0}
+  to{opacity:1}
 }
-.event-row.event-row-new{animation:event-row-arrive 1.25s ease-out both}
-.latest-events-btn.has-new-events{animation:latest-events-pulse 1.6s ease-in-out infinite}
+.event-row.event-row-new{animation:event-row-fade-in 180ms ease-out both}
 .latest-events-btn.has-new-events::after{
   content:attr(data-count);
   position:absolute;
@@ -207,10 +205,6 @@ body.event-fullscreen-open{overflow:hidden}
   font:700 10px/1 "Segoe UI",Arial,sans-serif;
   box-shadow:0 2px 7px #0008;
 }
-@keyframes latest-events-pulse{
-  0%,100%{box-shadow:0 5px 18px #0008,0 0 0 0 #5daeff00}
-  50%{box-shadow:0 5px 18px #0008,0 0 0 7px #5daeff35}
-}
 @media(prefers-reduced-motion:reduce){
-  .event-row.event-row-new,.latest-events-btn.has-new-events{animation:none}
+  .event-row.event-row-new{animation:none}
 }
