@@ -1,6 +1,6 @@
 """Minimal stream framer for the simulator's ISO8583 TCP wire format.
 
-Frame: 2-byte packed-BCD length (bytes after header), 5-byte TPDU,
+Frame: 2-byte big-endian HEX length (bytes after header), 5-byte TPDU,
 2-byte MTI, 8-byte primary bitmap, followed by data elements.
 Only DE 3 is decoded; the remaining fields are deliberately opaque.
 """
@@ -11,18 +11,11 @@ class Iso8583FrameError(ValueError):
     pass
 
 
-def decode_bcd_length(header: bytes) -> int:
+def decode_frame_length(header: bytes) -> int:
+    """Decode the 2-byte frame length as an unsigned big-endian HEX value."""
     if len(header) != 2:
         raise Iso8583FrameError("Length header must contain exactly 2 bytes")
-    # Keep compatibility with packed-BCD packets; 00DC-style headers are
-    # two-byte big-endian binary lengths.
-    digits = []
-    for byte in header:
-        for nibble in (byte >> 4, byte & 0x0F):
-            if nibble > 9:
-                return int.from_bytes(header, byteorder="big", signed=False)
-            digits.append(str(nibble))
-    return int("".join(digits))
+    return int.from_bytes(header, byteorder="big", signed=False)
 
 
 def extract_mti(frame: bytes) -> str:
@@ -42,7 +35,7 @@ def extract_processing_code(frame: bytes) -> str | None:
     """Return DE 3 as six digits, supporting ASCII and packed-BCD wire formats."""
     if len(frame) < 20:
         raise Iso8583FrameError("ISO8583 frame is too short for DE 3")
-    declared = decode_bcd_length(frame[:2])
+    declared = decode_frame_length(frame[:2])
     if declared != len(frame) - 2:
         raise Iso8583FrameError("Frame length does not match its header")
     bitmap = frame[9:17]
@@ -76,7 +69,7 @@ class Iso8583StreamFramer:
         self._buffer.extend(chunk)
         frames = []
         while len(self._buffer) >= 2:
-            length = decode_bcd_length(self._buffer[:2])
+            length = decode_frame_length(self._buffer[:2])
             if length < 15 or length > self.max_frame_length:
                 raise Iso8583FrameError(f"Invalid ISO8583 frame length: {length}")
             total = 2 + length
