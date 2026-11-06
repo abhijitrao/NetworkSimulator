@@ -210,3 +210,11 @@ button.feature-toggle:focus-visible{outline:2px solid var(--blue);outline-offset
 @media(prefers-reduced-motion:reduce){
   .event-row.event-row-new{animation:none}
 }
+
+
+/* Subtle branded footer at the bottom of the dashboard. */
+body{min-height:100vh;display:flex;flex-direction:column}
+.topbar{flex:0 0 auto}
+.page{flex:1 0 auto;width:100%}
+.app-footer{flex:0 0 auto;width:100%;padding:14px 24px;text-align:center;border-top:1px solid #182236;background:#0B1020;color:#303A4A;font-size:10px;line-height:1.6}
+.app-footer strong{color:#3A4557;font-weight:600}
