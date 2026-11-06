@@ -12,17 +12,17 @@ import webbrowser
 from flask import Flask, Response, jsonify, render_template, request
 
 from simulator.network_interfaces import get_network_interfaces
+from simulator.paths import get_data_dir
 
 from simulator.config_store import ProfileStore
 from simulator.models import FaultSettings, ProxyProfile
 from simulator.proxy.manager import ProxyManager
 
-# PyInstaller extracts bundled read-only resources to _MEIPASS. Keep user data
-# beside the executable so profiles survive restarts and one-file temp cleanup.
+# PyInstaller extracts bundled read-only resources to _MEIPASS. User data is
+# stored separately so Linux installations under /opt remain writable.
 FROZEN = bool(getattr(sys, "frozen", False))
 RESOURCE_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
-APP_DIR = Path(sys.executable).resolve().parent if FROZEN else Path(__file__).resolve().parent
-DATA_DIR = APP_DIR / "data"
+DATA_DIR = get_data_dir()
 CONFIG_PATH = DATA_DIR / "profiles.json"
 EXAMPLE_PATH = RESOURCE_DIR / "config" / "profiles.example.json"
 LOG = logging.getLogger("posnet.dashboard")
@@ -423,12 +423,37 @@ def create_app(config_path: str | Path = CONFIG_PATH, manager: ProxyManager | No
     return app
 
 
-if __name__ == "__main__":
+def main() -> int:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="POS Network Simulator dashboard")
+    parser.add_argument(
+        "--mode",
+        choices=("desktop", "server"),
+        default=os.environ.get("POS_SIMULATOR_MODE", "desktop"),
+        help="desktop opens a browser; server runs headless (default: desktop)",
+    )
+    parser.add_argument("--port", type=int, default=int(os.environ.get("POS_SIMULATOR_PORT", "5050")))
+    args = parser.parse_args()
+
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-    port = int(os.environ.get("POS_SIMULATOR_PORT", "5050"))
-    dashboard_url = f"http://127.0.0.1:{port}"
-    app = create_app()
+    dashboard_url = f"http://127.0.0.1:{args.port}"
+    dashboard = create_app()
     LOG.info("Dashboard available at %s", dashboard_url)
-    if not os.environ.get("POS_SIMULATOR_NO_BROWSER"):
-        threading.Timer(1.0, lambda: webbrowser.open(dashboard_url)).start()
-    app.run(host="127.0.0.1", port=port, threaded=True, debug=False, use_reloader=False)
+
+    if args.mode == "server":
+        # Waitress is a production WSGI server. Keep the dashboard bound to
+        # loopback; remote administration must use an SSH tunnel.
+        from waitress import serve
+
+        LOG.info("Starting headless server mode; management remains localhost-only")
+        serve(dashboard, host="127.0.0.1", port=args.port, threads=8)
+    else:
+        if not os.environ.get("POS_SIMULATOR_NO_BROWSER"):
+            threading.Timer(1.0, lambda: webbrowser.open(dashboard_url)).start()
+        dashboard.run(host="127.0.0.1", port=args.port, threaded=True, debug=False, use_reloader=False)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

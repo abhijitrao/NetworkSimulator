@@ -1,0 +1,3 @@
+-r requirements.txt
+# Production WSGI server used by headless Linux server mode.
+waitress>=3.0,<4
