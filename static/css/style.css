@@ -212,9 +212,9 @@ button.feature-toggle:focus-visible{outline:2px solid var(--blue);outline-offset
 }
 
 
-/* Branded footer at the bottom of the dashboard. */
+/* Subtle branded footer at the bottom of the dashboard. */
 body{min-height:100vh;display:flex;flex-direction:column}
 .topbar{flex:0 0 auto}
 .page{flex:1 0 auto;width:100%}
-.app-footer{flex:0 0 auto;width:100%;padding:18px 24px;text-align:center;border-top:1px solid var(--line);background:#0c1425;color:var(--muted);font-size:11px;line-height:1.6}
-.app-footer strong{color:var(--text);font-weight:700}
+.app-footer{flex:0 0 auto;width:100%;padding:14px 24px;text-align:center;border-top:1px solid #182236;background:transparent;color:#68758b;font-size:10px;line-height:1.6}
+.app-footer strong{color:#7b879b;font-weight:600}
