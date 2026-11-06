@@ -1,0 +1,82 @@
+name: Build portable Linux package
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [linux]
+  push:
+    branches: [linux]
+    paths:
+      - "app.py"
+      - "simulator/**"
+      - "templates/**"
+      - "static/**"
+      - "config/**"
+      - "requirements*.txt"
+      - ".github/workflows/build-linux.yml"
+
+jobs:
+  build-linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - ubuntu: "22.04"
+            runner: ubuntu-22.04
+            architecture: x86_64
+          - ubuntu: "24.04"
+            runner: ubuntu-24.04
+            architecture: x86_64
+          - ubuntu: "22.04"
+            runner: ubuntu-22.04-arm
+            architecture: arm64
+          - ubuntu: "24.04"
+            runner: ubuntu-24.04-arm
+            architecture: arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Linux build dependencies
+        run: python -m pip install -r requirements-linux.txt pyinstaller
+
+      - name: Run regression tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Build standalone Linux distribution
+        run: |
+          python -m PyInstaller \
+            --noconfirm \
+            --clean \
+            --onedir \
+            --console \
+            --name NetworkSimulator \
+            --add-data "templates:templates" \
+            --add-data "static:static" \
+            --add-data "config:config" \
+            app.py
+
+      - name: Verify executable and bundled resources
+        run: |
+          test -x dist/NetworkSimulator/NetworkSimulator
+          test -d dist/NetworkSimulator/_internal/templates
+          test -d dist/NetworkSimulator/_internal/static
+          test -d dist/NetworkSimulator/_internal/config
+
+      - name: Create portable archive
+        run: |
+          tar -czf "NetworkSimulator-Ubuntu-${{ matrix.ubuntu }}-${{ matrix.architecture }}.tar.gz" -C dist NetworkSimulator
+
+      - name: Upload Linux package
+        uses: actions/upload-artifact@v4
+        with:
+          name: NetworkSimulator-Ubuntu-${{ matrix.ubuntu }}-${{ matrix.architecture }}
+          path: NetworkSimulator-Ubuntu-${{ matrix.ubuntu }}-${{ matrix.architecture }}.tar.gz
+          if-no-files-found: error
+          retention-days: 30
