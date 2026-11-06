@@ -20,12 +20,17 @@ function restoreDashboardAfterDialog(dialog) {
   });
 }
 
-function toast(message) {
+function toast(message, type = 'info') {
   const el = $('toast');
+  if (!el) {
+    console.warn('[Network Simulator]', message);
+    return;
+  }
   el.textContent = message;
-  el.classList.add('show');
+  el.classList.remove('error', 'success', 'info');
+  el.classList.add('show', type);
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), 3200);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 6000);
 }
 
 async function api(url, options = {}) {
@@ -593,13 +598,17 @@ $('posConnectionList').addEventListener('click', event => {
   }
 });
 $('startAllBtn').addEventListener('click', async () => {
-  const enabledProfiles = state.filter(profile => profile.enabled);
-  if (!enabledProfiles.length) {
-    toast('No enabled profiles found. Please enable at least one profile.');
-    return;
-  }
-
   try {
+    // Refresh from the API before deciding whether any profiles are enabled.
+    const latest = await api('/api/state');
+    state = latest.profiles || [];
+    const enabledProfiles = state.filter(profile => profile.enabled);
+
+    if (!enabledProfiles.length) {
+      toast('No enabled profiles found. Please enable at least one profile.', 'info');
+      return;
+    }
+
     const result = await api('/api/profiles/start-all',{method:'POST',body:'{}'});
     await refresh();
     const outcomes = result.results || [];
@@ -607,7 +616,7 @@ $('startAllBtn').addEventListener('click', async () => {
     const startedCount = outcomes.length - failed.length;
 
     if (!failed.length) {
-      toast('All enabled profiles started successfully (' + startedCount + ').');
+      toast('All enabled profiles started successfully (' + startedCount + ').', 'success');
     } else {
       const failureDetails = failed.map(item => {
         const profile = enabledProfiles.find(candidate => candidate.id === item.id);
@@ -616,9 +625,11 @@ $('startAllBtn').addEventListener('click', async () => {
       const summary = startedCount
         ? 'Started ' + startedCount + ' profile(s). '
         : 'No enabled profiles could be started. ';
-      toast(summary + 'Failed: ' + failureDetails.join('; '));
+      toast(summary + 'Failed: ' + failureDetails.join('; '), 'error');
     }
-  } catch(e) { toast(e.message); }
+  } catch(e) {
+    toast('Could not start enabled profiles: ' + e.message, 'error');
+  }
 });
 $('stopAllBtn').addEventListener('click', async () => {
   try { await api('/api/profiles/stop-all',{method:'POST',body:'{}'}); await refresh(); toast('All proxies stopped'); }
