@@ -24,7 +24,8 @@ These rules are mandatory for all future work on this repository.
 
 ## 4. Pull Request and Merge Approval
 
-- Open a pull request from the task branch into `main`; provide a clear summary and test results.
+- Open a pull request from the task branch into the correct product-line stable branch; provide a clear summary and test results.
+- Windows task branches target `main`. Linux task branches target `linux` exclusively. The strict Linux isolation rules in Section 8 take precedence over any generic branching guidance in this document.
 - Keep the pull request available for the user to review and test.
 - **Never merge a pull request into `main` based only on phrases such as "continue", "go ahead", or approval to proceed with development/testing.**
 - Merge only after the user explicitly approves the merge, using an unambiguous instruction such as "merge this PR into main".
