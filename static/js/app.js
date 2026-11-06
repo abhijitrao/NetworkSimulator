@@ -33,6 +33,20 @@ function toast(message, type = 'info') {
   toastTimer = setTimeout(() => el.classList.remove('show'), 6000);
 }
 
+function showDialogError(dialogId, message) {
+  const error = $(dialogId + 'Error');
+  if (!error) return;
+  error.textContent = message;
+  error.hidden = false;
+}
+
+function clearDialogError(dialogId) {
+  const error = $(dialogId + 'Error');
+  if (!error) return;
+  error.textContent = '';
+  error.hidden = true;
+}
+
 async function api(url, options = {}) {
   const response = await fetch(url, {headers: {'Content-Type': 'application/json', ...(options.headers || {})}, ...options});
   const data = await response.json().catch(() => ({}));
@@ -360,6 +374,7 @@ async function refresh() {
 }
 
 function openDialog(profile = null) {
+  clearDialogError('profileDialog');
   $('profileForm').dataset.mode = profile ? 'edit' : 'create';
   $('dialogTitle').textContent = profile ? 'Edit profile' : 'Add profile';
   $('profileId').value = profile?.id || '';
@@ -407,7 +422,10 @@ $('profileForm').addEventListener('submit', async (event) => {
     } else {
       toast(id ? 'Profile saved. Proxy was not started' : 'Profile saved');
     }
-  } catch(e) { toast(e.message); }
+  } catch(e) {
+    if ($('profileDialog').open) showDialogError('profileDialog', e.message);
+    else toast(e.message, 'error');
+  }
 });
 
 $('profileList').addEventListener('click', async (event) => {
@@ -516,6 +534,7 @@ function addProcessingRuleRow(rule = {}) {
 }
 
 function openFeatureDialog(type, profile) {
+  clearDialogError('featureDialog');
   const sequence = profile.request_sequence_fault || {enabled:profile.request_sequence_enabled,orders:profile.request_sequence_orders || []};
   const processing = type === 'processing';
   $('featureDialogTitle').textContent = processing ? 'Processing Code Rules (DE 3)' : 'Request Sequence Blocking';
@@ -544,6 +563,7 @@ function openFeatureDialog(type, profile) {
 $('addProcessingRule').addEventListener('click', () => addProcessingRuleRow());
 $('featureForm').addEventListener('submit', async event => {
   event.preventDefault();
+  clearDialogError('featureDialog');
   const id = $('featureDialogProfileId').value, type = $('featureDialogType').value, raw = $('featureValues').value.trim();
   try {
     if (type === 'processing') {
@@ -567,8 +587,10 @@ $('featureForm').addEventListener('submit', async event => {
       if (orders.some(value => !/^\d+$/.test(value) || Number(value) < 1)) throw new Error('Enter positive request numbers separated by commas, for example: 2, 3, 5');
       await api('/api/profiles/' + encodeURIComponent(id) + '/request-sequence-fault', {method:'POST',body:JSON.stringify({enabled:$('featureEnabled').checked,orders,reset_on_end:$('resetSequenceOnEnd').checked})});
     }
-    $('featureDialog').close(); await refresh(); toast('Settings saved');
-  } catch(e) { toast(e.message); }
+    $('featureDialog').close(); await refresh(); toast('Settings saved', 'success');
+  } catch(e) {
+    showDialogError('featureDialog', e.message);
+  }
 });
 $('closeFeatureDialog').addEventListener('click', () => $('featureDialog').close());
 $('cancelFeatureDialog').addEventListener('click', () => $('featureDialog').close());
