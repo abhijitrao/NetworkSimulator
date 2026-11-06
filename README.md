@@ -57,6 +57,10 @@ The proxy does not decrypt TLS. Certificate-chain validation, hostname verificat
 - Abort closes active sockets; exact RST behavior and error codes are OS/timing dependent.
 - Dropping bytes from a TCP stream is not packet-loss simulation. Real packet loss/retransmission, SYN blackholes, Wi-Fi disassociation and whole-device internet outage require an approved gateway/firewall or OS-level test setup.
 
+## Ubuntu/Linux edition
+
+- [Ubuntu/Linux installation, desktop/server modes, data storage and build guide](docs/LINUX.md)
+
 ## Development
 
 - [Development plan](docs/DEVELOPMENT_PLAN.md)
