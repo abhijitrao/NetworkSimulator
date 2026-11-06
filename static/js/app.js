@@ -20,12 +20,31 @@ function restoreDashboardAfterDialog(dialog) {
   });
 }
 
-function toast(message) {
+function toast(message, type = 'info') {
   const el = $('toast');
+  if (!el) {
+    console.warn('[Network Simulator]', message);
+    return;
+  }
   el.textContent = message;
-  el.classList.add('show');
+  el.classList.remove('error', 'success', 'info');
+  el.classList.add('show', type);
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), 3200);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 6000);
+}
+
+function showDialogError(dialogId, message) {
+  const error = $(dialogId + 'Error');
+  if (!error) return;
+  error.textContent = message;
+  error.hidden = false;
+}
+
+function clearDialogError(dialogId) {
+  const error = $(dialogId + 'Error');
+  if (!error) return;
+  error.textContent = '';
+  error.hidden = true;
 }
 
 async function api(url, options = {}) {
@@ -355,6 +374,7 @@ async function refresh() {
 }
 
 function openDialog(profile = null) {
+  clearDialogError('profileDialog');
   $('profileForm').dataset.mode = profile ? 'edit' : 'create';
   $('dialogTitle').textContent = profile ? 'Edit profile' : 'Add profile';
   $('profileId').value = profile?.id || '';
@@ -402,7 +422,10 @@ $('profileForm').addEventListener('submit', async (event) => {
     } else {
       toast(id ? 'Profile saved. Proxy was not started' : 'Profile saved');
     }
-  } catch(e) { toast(e.message); }
+  } catch(e) {
+    if ($('profileDialog').open) showDialogError('profileDialog', e.message);
+    else toast(e.message, 'error');
+  }
 });
 
 $('profileList').addEventListener('click', async (event) => {
@@ -511,6 +534,7 @@ function addProcessingRuleRow(rule = {}) {
 }
 
 function openFeatureDialog(type, profile) {
+  clearDialogError('featureDialog');
   const sequence = profile.request_sequence_fault || {enabled:profile.request_sequence_enabled,orders:profile.request_sequence_orders || []};
   const processing = type === 'processing';
   $('featureDialogTitle').textContent = processing ? 'Processing Code Rules (DE 3)' : 'Request Sequence Blocking';
@@ -539,6 +563,7 @@ function openFeatureDialog(type, profile) {
 $('addProcessingRule').addEventListener('click', () => addProcessingRuleRow());
 $('featureForm').addEventListener('submit', async event => {
   event.preventDefault();
+  clearDialogError('featureDialog');
   const id = $('featureDialogProfileId').value, type = $('featureDialogType').value, raw = $('featureValues').value.trim();
   try {
     if (type === 'processing') {
@@ -562,8 +587,10 @@ $('featureForm').addEventListener('submit', async event => {
       if (orders.some(value => !/^\d+$/.test(value) || Number(value) < 1)) throw new Error('Enter positive request numbers separated by commas, for example: 2, 3, 5');
       await api('/api/profiles/' + encodeURIComponent(id) + '/request-sequence-fault', {method:'POST',body:JSON.stringify({enabled:$('featureEnabled').checked,orders,reset_on_end:$('resetSequenceOnEnd').checked})});
     }
-    $('featureDialog').close(); await refresh(); toast('Settings saved');
-  } catch(e) { toast(e.message); }
+    $('featureDialog').close(); await refresh(); toast('Settings saved', 'success');
+  } catch(e) {
+    showDialogError('featureDialog', e.message);
+  }
 });
 $('closeFeatureDialog').addEventListener('click', () => $('featureDialog').close());
 $('cancelFeatureDialog').addEventListener('click', () => $('featureDialog').close());
@@ -594,11 +621,37 @@ $('posConnectionList').addEventListener('click', event => {
 });
 $('startAllBtn').addEventListener('click', async () => {
   try {
+    // Refresh from the API before deciding whether any profiles are enabled.
+    const latest = await api('/api/state');
+    state = latest.profiles || [];
+    const enabledProfiles = state.filter(profile => profile.enabled);
+
+    if (!enabledProfiles.length) {
+      toast('No enabled profiles found. Please enable at least one profile.', 'info');
+      return;
+    }
+
     const result = await api('/api/profiles/start-all',{method:'POST',body:'{}'});
     await refresh();
-    const failed = result.results.filter(item => !item.ok);
-    toast(failed.length ? (failed.length + ' profile(s) could not start') : 'All enabled profiles started');
-  } catch(e) { toast(e.message); }
+    const outcomes = result.results || [];
+    const failed = outcomes.filter(item => !item.ok);
+    const startedCount = outcomes.length - failed.length;
+
+    if (!failed.length) {
+      toast('All enabled profiles started successfully (' + startedCount + ').', 'success');
+    } else {
+      const failureDetails = failed.map(item => {
+        const profile = enabledProfiles.find(candidate => candidate.id === item.id);
+        return (profile?.name || item.id) + ': ' + (item.error || 'Unknown error');
+      });
+      const summary = startedCount
+        ? 'Started ' + startedCount + ' profile(s). '
+        : 'No enabled profiles could be started. ';
+      toast(summary + 'Failed: ' + failureDetails.join('; '), 'error');
+    }
+  } catch(e) {
+    toast('Could not start enabled profiles: ' + e.message, 'error');
+  }
 });
 $('stopAllBtn').addEventListener('click', async () => {
   try { await api('/api/profiles/stop-all',{method:'POST',body:'{}'}); await refresh(); toast('All proxies stopped'); }

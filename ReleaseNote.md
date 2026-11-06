@@ -4,6 +4,13 @@ This file tracks the user-facing changes included in each stable release.
 
 ## v1.7 — Pending Release
 
+### Start enabled profiles feedback
+- Show dashboard notifications independently of dialogs, with clear info/success/error styling.
+- Display validation and API errors inside the relevant profile or feature dialog; clear the inline error when the dialog is reopened or resubmitted.
+- Show a clear message when no profiles are enabled instead of implying that proxy startup failed.
+- Report successful starts and identify each failed profile with its error reason when only some profiles start.
+- Preserve the existing Start All API and proxy startup behaviour.
+
 ### Request Sequence Blocking
 - Added an option to reset the request sequence counter automatically as soon as the configured end sequence is executed.
 - Manual counter reset preserves the automatic-reset setting and restarts the configured sequence from its beginning.
