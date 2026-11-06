@@ -593,11 +593,31 @@ $('posConnectionList').addEventListener('click', event => {
   }
 });
 $('startAllBtn').addEventListener('click', async () => {
+  const enabledProfiles = state.filter(profile => profile.enabled);
+  if (!enabledProfiles.length) {
+    toast('No enabled profiles found. Please enable at least one profile.');
+    return;
+  }
+
   try {
     const result = await api('/api/profiles/start-all',{method:'POST',body:'{}'});
     await refresh();
-    const failed = result.results.filter(item => !item.ok);
-    toast(failed.length ? (failed.length + ' profile(s) could not start') : 'All enabled profiles started');
+    const outcomes = result.results || [];
+    const failed = outcomes.filter(item => !item.ok);
+    const startedCount = outcomes.length - failed.length;
+
+    if (!failed.length) {
+      toast('All enabled profiles started successfully (' + startedCount + ').');
+    } else {
+      const failureDetails = failed.map(item => {
+        const profile = enabledProfiles.find(candidate => candidate.id === item.id);
+        return (profile?.name || item.id) + ': ' + (item.error || 'Unknown error');
+      });
+      const summary = startedCount
+        ? 'Started ' + startedCount + ' profile(s). '
+        : 'No enabled profiles could be started. ';
+      toast(summary + 'Failed: ' + failureDetails.join('; '));
+    }
   } catch(e) { toast(e.message); }
 });
 $('stopAllBtn').addEventListener('click', async () => {
