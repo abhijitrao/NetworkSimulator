@@ -140,7 +140,6 @@ button.feature-toggle:focus-visible{outline:2px solid var(--blue);outline-offset
 .processing-rule-row .remove-processing-rule{margin-top:20px;white-space:nowrap}
 @media(max-width:700px){.processing-rule-row{grid-template-columns:1fr 1fr}.processing-rule-row .processing-response-field{grid-column:1/-1}.processing-rule-row .remove-processing-rule{margin-top:0;justify-self:end}}
 
-#featureDialog{position:relative;overflow:visible}#featureDialog .toast{position:absolute;top:12px;right:12px;bottom:auto;z-index:1000}
 
 
 /* Smart traffic-log follow mode and jump-to-latest control. */
