@@ -4,6 +4,11 @@ This file tracks the user-facing changes included in each stable release.
 
 ## v1.7 — Pending Release
 
+### Profile listener configuration
+- New profiles default to listening on all network interfaces (`0.0.0.0`) so connected POS devices can reach the laptop listener.
+- Reject duplicate/conflicting listener ports with a clear inline validation message before saving.
+- Return a clear conflict response from the profile API when a listener port is already in use.
+
 ### Start enabled profiles feedback
 - Show dashboard notifications independently of dialogs, with clear info/success/error styling.
 - Display validation and API errors inside the relevant profile or feature dialog; clear the inline error when the dialog is reopened or resubmitted.
