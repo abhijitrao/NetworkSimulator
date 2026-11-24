@@ -4,6 +4,11 @@ This file tracks the user-facing changes included in each stable release.
 
 ## v1.7 — Pending Release
 
+### Profile listener configuration
+- New profiles default to listening on all network interfaces (`0.0.0.0`) so POS devices on the same network can reach the laptop listener.
+- Reject duplicate/conflicting listener ports with a clear inline validation message before saving.
+- Return a clear conflict response from the profile API when a listener port is already in use.
+
 ### Request Sequence Blocking
 - Added an option to reset the request sequence counter automatically as soon as the configured end sequence is executed.
 - Manual counter reset preserves the automatic-reset setting and restarts the configured sequence from its beginning.
