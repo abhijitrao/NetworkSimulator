@@ -105,6 +105,10 @@ def create_app(config_path: str | Path = CONFIG_PATH, manager: ProxyManager | No
             if any(item.id == profile.id for item in items):
                 return jsonify(error="Profile ID already exists"), 409
             items.append(profile)
+            try:
+                ProfileStore._validate_unique(items)
+            except ValueError as exc:
+                return jsonify(error=str(exc)), 409
             store.save(items)
         return jsonify(profile=profile.to_dict()), 201
 
@@ -118,6 +122,10 @@ def create_app(config_path: str | Path = CONFIG_PATH, manager: ProxyManager | No
             if any(row["profile_id"] == profile_id and row["running"] for row in proxy_manager.status()):
                 return jsonify(error="Stop this proxy before editing its endpoint or listener settings"), 409
             items[items.index(current)] = replacement
+            try:
+                ProfileStore._validate_unique(items)
+            except ValueError as exc:
+                return jsonify(error=str(exc)), 409
             store.save(items)
         return jsonify(profile=replacement.to_dict())
 

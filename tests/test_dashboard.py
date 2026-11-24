@@ -43,6 +43,32 @@ class DashboardTests(unittest.TestCase):
         deleted = self.client.delete("/api/profiles/two")
         self.assertEqual(deleted.status_code, 200)
 
+    def test_create_rejects_conflicting_listener_port_with_clear_error(self):
+        response = self.client.post("/api/profiles", json={
+            "id": "two", "name": "Conflicting", "upstream_host": "127.0.0.1",
+            "upstream_port": 9001, "bind_host": "0.0.0.0", "listen_port": 18766,
+            "transport_label": "tcp", "enabled": False,
+        })
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("Listener port collision", response.json["error"])
+        self.assertEqual(len(self.client.get("/api/state").json["profiles"]), 1)
+
+    def test_update_rejects_conflicting_listener_port_with_clear_error(self):
+        self.client.post("/api/profiles", json={
+            "id": "two", "name": "Second", "upstream_host": "127.0.0.1",
+            "upstream_port": 9001, "bind_host": "127.0.0.1", "listen_port": 18767,
+            "transport_label": "tcp", "enabled": False,
+        })
+        response = self.client.put("/api/profiles/two", json={
+            "name": "Second", "upstream_host": "127.0.0.1", "upstream_port": 9001,
+            "bind_host": "0.0.0.0", "listen_port": 18766, "transport_label": "tcp",
+            "enabled": False,
+        })
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("Listener port collision", response.json["error"])
+        saved = {p["id"]: p for p in self.client.get("/api/state").json["profiles"]}
+        self.assertEqual(saved["two"]["listen_port"], 18767)
+
     def test_import_merge(self):
         response = self.client.post("/api/profiles/import", json=[{
             "id": "two", "name": "Imported", "upstream_host": "127.0.0.1",
