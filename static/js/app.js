@@ -383,7 +383,7 @@ function openDialog(profile = null) {
   $('upstreamHost').value = profile?.upstream_host || '';
   $('upstreamPort').value = profile?.upstream_port || 9000;
   $('listenPort').value = profile?.listen_port || 8666;
-  $('bindHost').value = profile?.bind_host || '127.0.0.1';
+  $('bindHost').value = profile?.bind_host || '0.0.0.0';
   $('connectTimeout').value = profile?.connect_timeout_ms || 10000;
   $('notes').value = profile?.notes || '';
   $('enabled').checked = profile?.enabled ?? true;
@@ -411,6 +411,17 @@ $('profileForm').addEventListener('submit', async (event) => {
   event.preventDefault();
   try {
     const id = $('profileId').value, payload = formPayload(id);
+    const wildcardHosts = new Set(['0.0.0.0', '::', '']);
+    const conflictingProfile = state.find(profile =>
+      profile.id !== id &&
+      Number(profile.listen_port) === payload.listen_port &&
+      (profile.bind_host === payload.bind_host ||
+        wildcardHosts.has(profile.bind_host) ||
+        wildcardHosts.has(payload.bind_host))
+    );
+    if (conflictingProfile) {
+      throw new Error(`Local listen port ${payload.listen_port} conflicts with profile "${conflictingProfile.name}". Choose a different port or a non-conflicting bind address.`);
+    }
     await api(id ? '/api/profiles/' + encodeURIComponent(id) : '/api/profiles',
       {method:id ? 'PUT' : 'POST',body:JSON.stringify(payload)});
     $('profileDialog').close();
