@@ -62,7 +62,7 @@ class ProxyProfile:
             name=str(value.get("name", "New profile")).strip(),
             upstream_host=str(value.get("upstream_host", "127.0.0.1")).strip(),
             upstream_port=int(value.get("upstream_port", 9000)),
-            bind_host=str(value.get("bind_host", "127.0.0.1")).strip(),
+            bind_host=str(value.get("bind_host", "0.0.0.0")).strip(),
             listen_port=int(value.get("listen_port", 8666)),
             transport_label=str(value.get("transport_label", "tcp")).lower(),
             enabled=bool(value.get("enabled", True)),
